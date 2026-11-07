@@ -9,6 +9,7 @@ async function start(t, port, configured) {
     env.NEON_AUTH_BASE_URL = "https://neon.test.invalid/auth";
     env.NEON_AUTH_COOKIE_SECRET = "test-only-secret-for-http-integration-tests";
   }
+  if (configured === "normalized") env.NEON_AUTH_BASE_URL = "  https://neon.test.invalid/auth/  ";
   const server = spawn(process.execPath, ["--import", new URL("./fixtures/neon-fetch.mjs", import.meta.url).href, "node_modules/next/dist/bin/next", "start", "-p", String(port)], { env, stdio: ["ignore", "pipe", "pipe"] });
   let logs = "";
   server.stdout.on("data", (chunk) => { logs += chunk; });
@@ -43,6 +44,16 @@ test("missing environment keeps homepage public and fails auth closed", async (t
   const auth = await fetch(base + "/api/auth/get-session");
   assert.equal(auth.status, 503);
   assert.equal(auth.headers.get("cache-control"), "no-store");
+});
+
+test("normalized URL enables signup and initializes the actual SDK", async (t) => {
+  const base = await start(t, 3219, "normalized");
+  const signup = await fetch(base + "/signup");
+  assert.equal(signup.status, 200);
+  assert.doesNotMatch(await signup.text(), /Account access is being set up/);
+  const session = await fetch(base + "/api/auth/get-session");
+  assert.equal(session.status, 200);
+  assert.equal(await session.json(), null);
 });
 
 test("SDK cookie integration: signup, persisted session, login, logout and revoked-cookie replay", async (t) => {

@@ -13,6 +13,9 @@ globalThis.fetch = async (input, options = {}) => {
   const request = new Request(input, options);
   const headers = new Headers({ "Content-Type": "application/json" });
   const reply = (body, status = 200) => Response.json(body, { status, headers });
+  if (!url.pathname.startsWith("/auth/") || url.pathname.includes("//")) {
+    return reply({ message: "Invalid test endpoint path" }, 404);
+  }
   const token = request.headers.get("cookie")?.split("; ").find((part) => part.startsWith(`${tokenName}=`))?.slice(tokenName.length + 1);
 
   if (url.pathname.endsWith("/get-session")) {

@@ -47,6 +47,22 @@ The local checkout has no Neon variables or Vercel project link. Vercel's remote
 | `NEON_AUTH_BASE_URL` | The full Auth endpoint for the matching Neon branch, copied from Neon Auth or supplied by the Vercel integration. This is an HTTPS URL, not a PostgreSQL connection string. |
 | `NEON_AUTH_COOKIE_SECRET` | A cryptographically random secret of at least 32 characters, kept stable across deploys within the same environment. |
 
+### Diagnosing “Account access is being set up”
+
+This message comes from the local configuration gate before the app contacts Neon. A Ready deployment can still be missing runtime configuration: the public homepage intentionally builds without auth variables.
+
+The exact names are `NEON_AUTH_BASE_URL` and `NEON_AUTH_COOKIE_SECRET`. Both must apply to the environment serving the URL you opened. The URL is trimmed and trailing slashes removed consistently before validation and SDK initialization; the secret is preserved exactly. A database connection string is not an Auth URL.
+
+After deploying the diagnostic fix, open `/signup`, then open **Vercel > Project > Logs** for that deployment and filter for `[auth-config]`. Only fixed codes and variable names are logged, once per function instance:
+
+- `AUTH_URL_MISSING`: the runtime cannot see a nonempty `NEON_AUTH_BASE_URL`.
+- `AUTH_URL_INVALID`: that value is not an HTTPS Auth endpoint, or contains credentials, query parameters, or a fragment. Check privately for copied quotes or a database URL.
+- `COOKIE_SECRET_MISSING`: the runtime cannot see `NEON_AUTH_COOKIE_SECRET`.
+- `COOKIE_SECRET_TOO_SHORT`: the secret has fewer than 32 characters excluding surrounding whitespace.
+- `CONFIGURED`: both local checks passed; this is not a live Neon connectivity test.
+
+Confirm the deployment is **Production**, points at the intended Git commit, and is the deployment assigned to your domain. A Preview URL does not receive Production-only secrets. In **Project Settings > Environment Variables**, check the exact names and scopes, then correct any flagged setting privately and redeploy the latest code to the same environment. Never paste values into chat or logs. Neon's integration normally injects `NEON_AUTH_BASE_URL`; deployment-specific integration variables may not appear in the project-level list. See [Neon's integration documentation](https://neon.com/blog/auth-that-just-works-in-vercel-previews).
+
 Generate the cookie secret locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`, then save it directly in Vercel or your ignored `.env.local`. Never paste it into chat or commit it. For local testing, copy `.env.example` to `.env.local` and fill the two values privately, or pull Development variables with an authenticated Vercel CLI. Changes in Vercel apply to subsequent deployments; restart the local server after changing `.env.local`.
 
 This app does not need `NEXT_PUBLIC_*` credentials or a direct `DATABASE_URL` for authentication. Neon Auth manages users, password hashing, and persistent sessions in the connected branch's `neon_auth` schema. Do not create competing auth tables or run custom auth migrations. Existing database variables supplied by Neon can stay in Vercel for future application data.
@@ -67,7 +83,7 @@ pnpm build
 pnpm test:integration
 ```
 
-The HTTP integration tests start temporary production servers on ports 3217/3218, then stop them. They use a test-only upstream substitute and the real Neon SDK to check configuration failure, signup/login routing, persistent cookies, signed-in dashboard rendering, invalid credentials, duplicate accounts, logout cookie deletion, and revoked/forged cookie rejection. They do **not** prove that your live Neon project is configured correctly. The substitute is only imported by the test runner and is never used by application code.
+The HTTP integration tests start temporary production servers on ports 3217/3218/3219, then stop them. They use a test-only upstream substitute and the real Neon SDK to check configuration failure, signup/login routing, persistent cookies, signed-in dashboard rendering, invalid credentials, duplicate accounts, logout cookie deletion, and revoked/forged cookie rejection. They do **not** prove that your live Neon project is configured correctly. The substitute is only imported by the test runner and is never used by application code.
 
 After providing real environment variables, verify with a test account: sign up, complete email verification if required, refresh `/dashboard`, open it in a new tab, log out, and confirm direct access redirects to `/login`. Log in again and check that the same account returns. Confirm users/sessions in the connected branch's Neon Auth console.
 
