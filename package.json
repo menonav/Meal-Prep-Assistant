@@ -5,15 +5,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test tests/auth-config.test.mjs",
+    "test:integration": "node --test tests/auth-http.test.mjs"
   },
   "engines": {
     "node": "24.x"
   },
   "packageManager": "pnpm@11.25.0",
   "dependencies": {
+    "@neondatabase/auth": "0.7.0-beta",
     "next": "16.4.5",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
-  }
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
+  },
+  "type": "module"
 }

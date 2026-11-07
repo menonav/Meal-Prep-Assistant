@@ -1,0 +1,8 @@
+# Match the Better Auth version required by the Neon SDK.
+overrides:
+  "@better-auth/api-key": "1.7.6"
+  "better-call": "1.4.0"
+
+# core-js uses its install hook for a donation notice; it needs no build.
+allowBuilds:
+  core-js: false
