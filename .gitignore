@@ -10,3 +10,9 @@ node_modules/
 *.tgz
 Thumbs.db
 .DS_Store
+
+# Next.js and Vercel local output
+.next/
+out/
+.vercel/
+*.tsbuildinfo
