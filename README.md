@@ -1,6 +1,6 @@
 # Meal Prep Assistant
 
-A minimal Next.js App Router app with React and managed Neon Auth. The homepage preserves the original landing page's content, styles, Google Fonts, and Unsplash image, with account links added below the closing message. AI, meal planning, and payments are not implemented.
+A Next.js App Router app with React and managed Neon Auth. The homepage preserves the original landing page's content, styles, Google Fonts, and Unsplash image, with account links below the closing message. The protected weekly planner lets users schedule sample meals and builds a consolidated, checkable shopping list. Planner data is currently stored in the browser; fridge photo recognition, AI recipe suggestions, and cross-device sync are not implemented yet.
 
 ## Local development
 
@@ -27,7 +27,8 @@ pnpm start
 - `dist/index.html`: retained original reference; Next.js does not serve or build from this directory.
 - `pnpm-lock.yaml`: pinned dependency resolution for reproducible installs.
 - `/signup` and `/login`: email/password account forms using the official Neon Auth client.
-- `/dashboard`: server-protected account page with logout.
+- `/dashboard`: server-protected account page with logout and a link to the planner.
+- `/planner`: server-protected weekly meal planner with sample recipes, serving adjustments, and an automatically combined shopping list. Plans are saved in the current browser.
 - `app/api/auth/[...path]/route.js`: same-origin SDK proxy; secrets stay on the server.
 - `lib/auth/`: environment validation and Neon Auth SDK configuration.
 - `proxy.js`: session validation/refresh for dashboard routes. The dashboard also independently revalidates sessions with Neon, bypassing the cookie cache.
