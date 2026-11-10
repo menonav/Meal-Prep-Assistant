@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./planner.css";
+import FridgeAssistant from "./fridge-assistant";
 
-const STORAGE_KEY = "meal-prep-assistant-plans-v1";
+const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const RECIPES = [
   {
@@ -73,7 +74,7 @@ function formatAmount(amount) {
 function shoppingItems(week) {
   const items = new Map();
   for (const meal of week.meals) {
-    const recipe = RECIPES.find((candidate) => candidate.id === meal.recipeId);
+    const recipe = meal.recipe || RECIPES.find((candidate) => candidate.id === meal.recipeId);
     if (!recipe) continue;
     for (const ingredient of recipe.ingredients) {
       const key = `${ingredient.name.toLowerCase()}|${ingredient.unit}`;
@@ -95,34 +96,105 @@ function initialsForDay(day) {
   return day.slice(0, 3).toUpperCase();
 }
 
-export default function PlannerClient() {
+function hasSavedPlans(plans) {
+  return Boolean(plans && typeof plans === "object" && Object.keys(plans).length);
+}
+
+export default function PlannerClient({ userId, premium, priceCents }) {
   const [weekStart, setWeekStart] = useState(null);
   const [weekPlans, setWeekPlans] = useState({});
   const [tab, setTab] = useState("plan");
   const [selectedRecipes, setSelectedRecipes] = useState({});
   const [customItem, setCustomItem] = useState("");
   const [ready, setReady] = useState(false);
+  const [syncMode, setSyncMode] = useState("loading");
+  const [syncStatus, setSyncStatus] = useState("");
+  const [legacyPlans, setLegacyPlans] = useState(null);
+  const storageKey = `meal-prep-assistant-plans-v1:${userId}`;
+  const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => {
+    let active = true;
     const today = new Date();
     setWeekStart(weekStartFor(today));
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) setWeekPlans(JSON.parse(saved));
-    } catch {
-      setWeekPlans({});
+    async function loadPlans() {
+      let cachedPlans = {};
+      let oldBrowserPlans = {};
+      try {
+        cachedPlans = JSON.parse(window.localStorage.getItem(storageKey) || "{}");
+        oldBrowserPlans = JSON.parse(window.localStorage.getItem(LEGACY_STORAGE_KEY) || "{}");
+      } catch {
+        cachedPlans = {};
+        oldBrowserPlans = {};
+      }
+      try {
+        const response = await fetch("/api/planner", { cache: "no-store" });
+        if (response.ok) {
+          const payload = await response.json();
+          if (!active) return;
+          if (hasSavedPlans(payload.plans)) {
+            setWeekPlans(payload.plans);
+            window.localStorage.setItem(storageKey, JSON.stringify(payload.plans));
+          } else {
+            setWeekPlans({});
+            if (hasSavedPlans(oldBrowserPlans)) setLegacyPlans(oldBrowserPlans);
+          }
+          setSyncMode("cloud");
+        } else {
+          if (!active) return;
+          setWeekPlans(hasSavedPlans(cachedPlans) ? cachedPlans : oldBrowserPlans);
+          setSyncMode("local");
+          setSyncStatus("Couldn’t reach account sync. Changes are saved in this browser.");
+        }
+      } catch {
+        if (!active) return;
+        setWeekPlans(hasSavedPlans(cachedPlans) ? cachedPlans : oldBrowserPlans);
+        setSyncMode("local");
+        setSyncStatus("Couldn’t reach account sync. Changes are saved in this browser.");
+      } finally {
+        if (active) setReady(true);
+      }
     }
-    setReady(true);
-  }, []);
+    loadPlans();
+    return () => { active = false; };
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || syncMode === "loading") return;
+    let active = true;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(weekPlans));
+      window.localStorage.setItem(storageKey, JSON.stringify(weekPlans));
     } catch {
-      // The planner remains usable if browser storage is disabled or full.
+      // The server remains the source of truth when browser storage is unavailable.
     }
-  }, [weekPlans, ready]);
+    if (syncMode !== "cloud") return;
+    setSyncStatus("Saving to your account…");
+    const timeout = window.setTimeout(async () => {
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        if (!active) return;
+        try {
+          const response = await fetch("/api/planner", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plans: weekPlans }),
+          });
+          if (!response.ok) throw new Error("save failed");
+          if (active) setSyncStatus("Saved to your account.");
+        } catch {
+          if (active) setSyncStatus("Couldn’t sync right now. Your changes are still saved in this browser.");
+        }
+      });
+    }, 450);
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [weekPlans, ready, syncMode, storageKey]);
+
+  function importLegacyPlans() {
+    if (!legacyPlans) return;
+    setWeekPlans(legacyPlans);
+    setLegacyPlans(null);
+    setSyncMode("cloud");
+    setSyncStatus("Saving imported plan to your account…");
+  }
 
   const currentKey = weekStart ? dateKey(weekStart) : "";
   const week = weekPlans[currentKey] || EMPTY_WEEK;
@@ -162,6 +234,19 @@ export default function PlannerClient() {
       meals: [...current.meals, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, dayIndex, recipeId, servings: 2 }],
     }));
     setSelectedRecipes((current) => ({ ...current, [dayIndex]: "" }));
+  }
+
+  function addAiMeal(recipe, dayIndex) {
+    updateWeek((current) => ({
+      ...current,
+      meals: [...current.meals, {
+        id: `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        dayIndex,
+        servings: recipe.servings,
+        recipe: { ...recipe, id: `ai-${Date.now()}`, emoji: recipe.emoji || "🍽️" },
+      }],
+    }));
+    setTab("plan");
   }
 
   function changeServings(mealId, amount) {
@@ -212,6 +297,8 @@ export default function PlannerClient() {
         <Link className="planner-back" href="/dashboard">← Your account</Link>
       </div>
 
+      <FridgeAssistant premium={premium} priceCents={priceCents} onAddRecipe={addAiMeal} />
+
       <div className="planner-controls">
         <div className="week-switcher" aria-label="Choose week">
           <button type="button" onClick={() => changeWeek(-1)} aria-label="Previous week">←</button>
@@ -234,7 +321,7 @@ export default function PlannerClient() {
                   <div className="day-heading"><span className="day-monogram">{initialsForDay(day)}</span><div><h2>{day}</h2><p>{prettyDate(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index), { month: "long", day: "numeric" })}</p></div></div>
                   <div className="day-meals">
                     {meals.map((meal) => {
-                      const recipe = RECIPES.find((candidate) => candidate.id === meal.recipeId);
+                      const recipe = meal.recipe || RECIPES.find((candidate) => candidate.id === meal.recipeId);
                       if (!recipe) return null;
                       return (
                         <div className="planned-meal" key={meal.id}>
@@ -259,7 +346,10 @@ export default function PlannerClient() {
             })}
           </section>
           <div className="planner-tip"><span aria-hidden="true">✦</span><p><strong>Start small.</strong> Add the meals you know you’ll make; the list updates as you plan.</p><button type="button" onClick={() => setTab("list")}>See shopping list →</button></div>
-          <p className="planner-storage-note">Your plan is saved in this browser for now.</p>
+          <div className="planner-sync-notice" aria-live="polite">
+            {legacyPlans && <p>We found a plan saved in this browser. <button type="button" onClick={importLegacyPlans}>Import it to this account</button></p>}
+            <p className={syncMode === "local" ? "planner-storage-note" : "planner-sync-status"}>{syncMode === "cloud" ? (syncStatus || "Saved to your account.") : (syncStatus || "Loading your account plan…")}</p>
+          </div>
         </>
       ) : (
         <section className="shopping-panel">
@@ -275,7 +365,10 @@ export default function PlannerClient() {
             </section>)}
           </div> : <div className="shopping-empty"><span aria-hidden="true">🛒</span><h3>Your list is waiting for a meal.</h3><p>Add a recipe to your weekly plan and its ingredients will show up here.</p><button type="button" className="planner-primary" onClick={() => setTab("plan")}>Plan a meal</button></div>}
           <form className="custom-item-form" onSubmit={addCustomItem}><label className="sr-only" htmlFor="custom-grocery">Add a grocery item</label><input id="custom-grocery" value={customItem} onChange={(event) => setCustomItem(event.target.value)} placeholder="Add something else to your list" /><button type="submit" disabled={!customItem.trim()}>Add item</button></form>
-          <p className="planner-storage-note">Your list is saved in this browser for now.</p>
+          <div className="planner-sync-notice" aria-live="polite">
+            {legacyPlans && <p>We found a plan saved in this browser. <button type="button" onClick={importLegacyPlans}>Import it to this account</button></p>}
+            <p className={syncMode === "local" ? "planner-storage-note" : "planner-sync-status"}>{syncMode === "cloud" ? (syncStatus || "Saved to your account.") : (syncStatus || "Loading your account plan…")}</p>
+          </div>
         </section>
       )}
     </main>

@@ -1,6 +1,6 @@
 # Meal Prep Assistant
 
-A Next.js App Router app with React and managed Neon Auth. The homepage preserves the original landing page's content, styles, Google Fonts, and Unsplash image, with account links below the closing message. The protected weekly planner lets users schedule sample meals and builds a consolidated, checkable shopping list. Planner data is currently stored in the browser; fridge photo recognition, AI recipe suggestions, and cross-device sync are not implemented yet.
+A Next.js App Router app with managed Neon Auth, an account-synced weekly planner, a Stripe premium checkout, and an AI fridge-photo recipe feature. The free planner stores each signed-in user's weekly plan and shopping-list state in Neon Postgres. Premium members can upload a fridge photo to identify ingredients and get three practical recipes they can add to the weekly plan. The image is sent to OpenAI for analysis and is not stored by this app.
 
 ## Local development
 
@@ -28,8 +28,12 @@ pnpm start
 - `pnpm-lock.yaml`: pinned dependency resolution for reproducible installs.
 - `/signup` and `/login`: email/password account forms using the official Neon Auth client.
 - `/dashboard`: server-protected account page with logout and a link to the planner.
-- `/planner`: server-protected weekly meal planner with sample recipes, serving adjustments, and an automatically combined shopping list. Plans are saved in the current browser.
+- `/planner`: server-protected weekly meal planner with sample recipes, AI recipe suggestions, serving adjustments, and a combined shopping list. Plan state is stored in Neon by authenticated user; browser-only legacy plans can be imported after confirmation.
 - `app/api/auth/[...path]/route.js`: same-origin SDK proxy; secrets stay on the server.
+- `app/api/planner/route.js`: authenticated read/write API for account-owned planner data.
+- `app/api/ai/fridge/route.js`: authenticated, premium-gated photo analysis via OpenAI Responses API.
+- `app/api/stripe/`: Checkout Session creation, verified webhook, and confirmed payment return.
+- `lib/app-data.js`: Neon Postgres storage for meal plans, premium entitlements, and a five-scan daily AI limit.
 - `lib/auth/`: environment validation and Neon Auth SDK configuration.
 - `proxy.js`: session validation/refresh for dashboard routes. The dashboard also independently revalidates sessions with Neon, bypassing the cookie cache.
 
@@ -47,6 +51,7 @@ The local checkout has no Neon variables or Vercel project link. Vercel's remote
 | --- | --- |
 | `NEON_AUTH_BASE_URL` | The full Auth endpoint for the matching Neon branch, copied from Neon Auth or supplied by the Vercel integration. This is an HTTPS URL, not a PostgreSQL connection string. |
 | `NEON_AUTH_COOKIE_SECRET` | A cryptographically random secret of at least 32 characters, kept stable across deploys within the same environment. |
+| `DATABASE_URL` | The Postgres connection string for the matching Neon branch; the app creates its planner and entitlement tables on first use. |
 
 ### Diagnosing “Account access is being set up”
 
@@ -73,6 +78,35 @@ In Neon Auth, confirm email/password authentication is enabled. Confirm the prod
 The SDK manages persistent HTTP-only, Secure, SameSite cookies and sign-out invalidation. Use HTTPS for deployed environments; use `localhost` for local development. The app stores no password or token in local storage. When configuration is missing, the homepage remains public, account forms are disabled, and auth API calls return 503 rather than a fake successful login.
 
 Fonts and the hero image still load from external services.
+
+## AI recipes and Stripe checkout
+
+Add these server-side environment variables in Vercel. Do not paste secret values into GitHub or chat:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Key for the AI fridge-photo analysis. The default model is `gpt-4.1-mini`; set `OPENAI_MODEL` only if you choose another vision-capable Responses API model. |
+| `STRIPE_SECRET_KEY` | Stripe API key. Use a test-mode key while testing. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for the Stripe webhook endpoint below. |
+| `STRIPE_PRICE_CENTS` | One-time premium price in cents; defaults to `100` ($1.00). |
+
+Create a Stripe webhook endpoint at `https://meal-prep-assistant-avinash-menon.vercel.app/api/stripe/webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`, then save its signing secret as `STRIPE_WEBHOOK_SECRET`. Checkout creates a one-time premium payment. The signed webhook (and the verified success return) records paid access in Neon; returning to the site alone never grants it. Set the same branch-specific `DATABASE_URL` used by the app so that entitlement can be saved.
+
+Use Stripe **test mode** and its documented test card numbers to check the flow first. When switching to live mode, replace both the Stripe API key and webhook signing secret with live-mode values. Vercel Preview requires its own available keys and a webhook pointing to the Preview deployment if you want to test payments there.
+
+## Demo account and submission evidence
+
+The app grants premium access to `demo@demo.com` so the assignment demo login can use the AI feature without checkout. The Neon Auth user still needs to exist. In the Production branch's Neon Better Auth settings, turn off the email-verification requirement, create the assignment-specified demo account through `/signup`, then confirm you can log in through `/login`. Keep this account; the grader logs in and does not create it.
+
+For the required Neon screenshot, create a fresh account through `/signup` immediately before submission, then open the Production branch's Neon SQL editor and run:
+
+```sql
+SELECT id, email, "emailVerified", "createdAt"
+FROM neon_auth."user"
+ORDER BY "createdAt" DESC;
+```
+
+Capture the result with several real account rows visible, without showing password hashes or secrets. Put that screenshot, the production URL, and the GitHub repository link in the one-page Canvas submission.
 
 Implementation follows the [official Neon Next.js SDK guide](https://github.com/neondatabase/neon-js/blob/main/packages/auth/NEXT-JS.md) and [Neon authentication flow](https://github.com/neondatabase/website/blob/main/content/docs/auth/authentication-flow.md).
 
