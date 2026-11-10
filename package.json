@@ -15,10 +15,12 @@
   "packageManager": "pnpm@11.25.0",
   "dependencies": {
     "@neondatabase/auth": "0.7.0-beta",
+    "@neondatabase/serverless": "^1.2.0",
     "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "stripe": "^23.1.0"
   },
   "type": "module"
 }
