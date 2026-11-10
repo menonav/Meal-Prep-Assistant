@@ -88,11 +88,11 @@ Add these server-side environment variables in Vercel. Do not paste secret value
 | `OPENAI_API_KEY` | Key for the AI fridge-photo analysis. The default model is `gpt-4.1-mini`; set `OPENAI_MODEL` only if you choose another vision-capable Responses API model. |
 | `STRIPE_SECRET_KEY` | Stripe API key. Use a test-mode key while testing. |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for the Stripe webhook endpoint below. |
-| `STRIPE_PRICE_CENTS` | One-time premium price in cents; defaults to `100` ($1.00). |
+| `STRIPE_PRICE_CENTS` | Monthly premium subscription price in cents; defaults to `999` ($9.99/month). |
 
-Create a Stripe webhook endpoint at `https://meal-prep-assistant-avinash-menon.vercel.app/api/stripe/webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`, then save its signing secret as `STRIPE_WEBHOOK_SECRET`. Checkout creates a one-time premium payment. The signed webhook (and the verified success return) records paid access in Neon; returning to the site alone never grants it. Set the same branch-specific `DATABASE_URL` used by the app so that entitlement can be saved.
+Create a Stripe webhook endpoint at `https://meal-prep-assistant-avinash-menon.vercel.app/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`, then save its signing secret as `STRIPE_WEBHOOK_SECRET`. Checkout creates a recurring $9.99 monthly subscription by default. Verified webhooks and the verified success return sync subscription status to Neon; canceled or inactive subscriptions lose premium access. Set the same branch-specific `DATABASE_URL` used by the app so that entitlement can be saved.
 
-Use Stripe **test mode** and its documented test card numbers to check the flow first. When switching to live mode, replace both the Stripe API key and webhook signing secret with live-mode values. Vercel Preview requires its own available keys and a webhook pointing to the Preview deployment if you want to test payments there.
+Use Stripe **test mode** and its documented test card numbers to check the recurring checkout and cancellation flow first. When switching to live mode, replace both the Stripe API key and webhook signing secret with live-mode values. Vercel Preview requires its own available keys and a webhook pointing to the Preview deployment if you want to test payments there.
 
 ## Demo account and submission evidence
 
