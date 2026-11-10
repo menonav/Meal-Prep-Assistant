@@ -25,29 +25,32 @@ export async function POST(request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Stripe checkout is not configured yet." }, { status: 503 });
   }
-  const amount = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "100", 10);
-  if (!Number.isInteger(amount) || amount < 50 || amount > 100_000) {
+  const amount = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "999", 10);
+  if (!Number.isInteger(amount) || amount < 50 || amount > 1_000_000) {
     return NextResponse.json({ error: "The premium price is not configured correctly." }, { status: 503 });
   }
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const origin = new URL(request.url).origin;
+    const metadata = { userId: String(user.id), userEmail: String(user.email || "") };
     const session = await stripe.checkout.sessions.create({
-      mode: "payment",
+      mode: "subscription",
       line_items: [{
         quantity: 1,
         price_data: {
           currency: "usd",
           unit_amount: amount,
+          recurring: { interval: "month" },
           product_data: {
             name: "Meal Prep Assistant Premium",
-            description: "AI fridge photo scans and recipe suggestions",
+            description: "Monthly access to AI fridge photo scans and recipe suggestions",
           },
         },
       }],
       customer_email: user.email,
-      metadata: { userId: String(user.id), userEmail: String(user.email || "") },
+      metadata,
+      subscription_data: { metadata },
       success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/planner?payment=cancelled`,
     });
