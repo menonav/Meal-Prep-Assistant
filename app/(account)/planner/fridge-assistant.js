@@ -68,11 +68,11 @@ export default function FridgeAssistant({ premium, onAddRecipe, priceCents }) {
     <section className="fridge-assistant" aria-labelledby="fridge-title">
       <div className="fridge-heading">
         <div><p className="planner-eyebrow">Make something from what you have</p><h2 id="fridge-title">What’s in your fridge?</h2><p>Upload a photo and AI will spot ingredients and suggest three recipes.</p></div>
-        {premium ? <span className="premium-badge">Premium access</span> : <span className="premium-price">${(priceCents / 100).toFixed(2)} one-time</span>}
+        {premium ? <span className="premium-badge">Premium access</span> : <span className="premium-price">${(priceCents / 100).toFixed(2)}/month</span>}
       </div>
 
       {!premium ? (
-        <div className="fridge-unlock"><p>Unlock photo-based recipe ideas and add them straight to your weekly plan.</p><button className="planner-primary" type="button" onClick={startCheckout} disabled={checkoutPending}>{checkoutPending ? "Opening checkout…" : `Unlock premium · $${(priceCents / 100).toFixed(2)}`}</button></div>
+        <div className="fridge-unlock"><p>Unlock photo-based recipe ideas and add them straight to your weekly plan.</p><button className="planner-primary" type="button" onClick={startCheckout} disabled={checkoutPending}>{checkoutPending ? "Opening checkout…" : `Unlock premium · ${(priceCents / 100).toFixed(2)}/month`}</button></div>
       ) : (
         <>
           <form className="fridge-upload-form" onSubmit={scanFridge}>
