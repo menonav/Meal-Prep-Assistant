@@ -13,6 +13,6 @@ export default async function PlannerPage() {
 
   let premium = false;
   try { premium = await hasPremiumAccess(session.user); } catch { /* The planner still works locally if app-data storage is not configured. */ }
-  const priceCents = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "100", 10);
-  return <PlannerClient userId={session.user.id} premium={premium} priceCents={Number.isInteger(priceCents) && priceCents >= 50 ? priceCents : 100} />;
+  const priceCents = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "999", 10);
+  return <PlannerClient userId={session.user.id} premium={premium} priceCents={Number.isInteger(priceCents) && priceCents >= 50 ? priceCents : 999} />;
 }
