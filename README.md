@@ -65,7 +65,7 @@ Confirm the deployment is **Production**, points at the intended Git commit, and
 
 Generate the cookie secret locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`, then save it directly in Vercel or your ignored `.env.local`. Never paste it into chat or commit it. For local testing, copy `.env.example` to `.env.local` and fill the two values privately, or pull Development variables with an authenticated Vercel CLI. Changes in Vercel apply to subsequent deployments; restart the local server after changing `.env.local`.
 
-This app does not need `NEXT_PUBLIC_*` credentials or a direct `DATABASE_URL` for authentication. Neon Auth manages users, password hashing, and persistent sessions in the connected branch's `neon_auth` schema. Do not create competing auth tables or run custom auth migrations. Existing database variables supplied by Neon can stay in Vercel for future application data.
+Authentication does not need `NEXT_PUBLIC_*` credentials or a direct `DATABASE_URL`. Neon Auth manages users, password hashing, and persistent sessions in the connected branch's `neon_auth` schema. Do not create competing auth tables or run custom auth migrations. Stripe billing uses `DATABASE_URL` only for its separate application billing table; see the Stripe setup below.
 
 In Neon Auth, confirm email/password authentication is enabled. Confirm the production/custom domain and any preview domains are trusted (the Vercel integration may manage these automatically). Enable localhost access for local development. Use the appropriate branch endpoint for each Vercel environment. If email verification is required, configure Neon email delivery; signup displays a verification notice when no session is issued and sends a callback to `/dashboard`.
 
@@ -88,5 +88,18 @@ The HTTP integration tests start temporary production servers on ports 3217/3218
 After providing real environment variables, verify with a test account: sign up, complete email verification if required, refresh `/dashboard`, open it in a new tab, log out, and confirm direct access redirects to `/login`. Log in again and check that the same account returns. Confirm users/sessions in the connected branch's Neon Auth console.
 
 The pinned Neon SDK is beta. Its bundled, unused Auth UI package currently declares a peer on the previous SDK beta; the custom forms use only the SDK client/server entry points. Better Auth transitive versions are pinned in `pnpm-workspace.yaml` to match the SDK.
+
+## Stripe subscription setup
+
+The account dashboard uses Stripe Checkout for recurring subscriptions and Stripe's hosted customer portal for billing changes and cancellations. The app keeps the Stripe customer and subscription status in a small application table; Neon Auth remains the source of account identity.
+
+1. In Stripe Dashboard, create a product for the paid Meal Prep Assistant plan and add a recurring Price. Copy its `price_...` ID. The app does not set or assume a dollar amount.
+2. Run `db/migrations/001_stripe_billing.sql` once in the Neon SQL Editor for the database branch used by this environment.
+3. Enable Stripe's customer portal in Dashboard settings so customers can update or cancel their plan.
+4. Set these server-side variables in Vercel for Preview and Production separately: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, and `APP_URL`. Start with Stripe test-mode keys and test Price ID. `APP_URL` must be the origin of the environment being used. Never use `NEXT_PUBLIC_` for secret keys.
+5. For local testing, set `APP_URL=http://localhost:3000`, run the app, then run `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the `whsec_...` shown by Stripe CLI in `STRIPE_WEBHOOK_SECRET` for local development.
+6. In Stripe Dashboard, register `https://YOUR_DOMAIN/api/stripe/webhook` and subscribe to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Use the webhook signing secret for that endpoint as `STRIPE_WEBHOOK_SECRET` in the matching Vercel environment.
+
+The webhook verifies Stripe's signature, syncs subscription status, ignores stale event updates, and acknowledges duplicate deliveries safely. Do not grant paid access based only on the Checkout success redirect; use the webhook-synced subscription status for any future paywall.
 
 The previous GitHub Pages workflow was removed because it published the retained legacy `dist` page. This change does not remove a previously published GitHub Pages site; disable Pages separately in the repository settings if you want to retire that URL. The ignored `.openai/hosting.json` is legacy Sites hosting metadata and is not used by Vercel.
