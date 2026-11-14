@@ -25,7 +25,7 @@ export async function POST(request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Stripe checkout is not configured yet." }, { status: 503 });
   }
-  const amount = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "999", 10);
+  const amount = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "100", 10);
   if (!Number.isInteger(amount) || amount < 50 || amount > 1_000_000) {
     return NextResponse.json({ error: "The premium price is not configured correctly." }, { status: 503 });
   }
