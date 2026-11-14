@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-export default function FridgeAssistant({ premium, onAddRecipe, priceCents }) {
+export default function FridgeAssistant({ premium, onAddRecipe }) {
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
   const [recipes, setRecipes] = useState([]);
   const [ingredients, setIngredients] = useState([]);
   const [remainingScans, setRemainingScans] = useState(null);
   const [pending, setPending] = useState(false);
-  const [checkoutPending, setCheckoutPending] = useState(false);
   const [error, setError] = useState("");
   const [dayIndex, setDayIndex] = useState(0);
   const [message, setMessage] = useState("");
@@ -44,21 +43,6 @@ export default function FridgeAssistant({ premium, onAddRecipe, priceCents }) {
     }
   }
 
-  async function startCheckout() {
-    if (checkoutPending) return;
-    setCheckoutPending(true);
-    setError("");
-    try {
-      const response = await fetch("/api/stripe/checkout", { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok || !payload.url) throw new Error(payload.error || "Checkout is not available yet.");
-      window.location.assign(payload.url);
-    } catch (checkoutError) {
-      setError(checkoutError.message);
-      setCheckoutPending(false);
-    }
-  }
-
   function addRecipe(recipe) {
     onAddRecipe(recipe, dayIndex);
     setMessage(`${recipe.title} added to your plan.`);
@@ -68,11 +52,10 @@ export default function FridgeAssistant({ premium, onAddRecipe, priceCents }) {
     <section className="fridge-assistant" aria-labelledby="fridge-title">
       <div className="fridge-heading">
         <div><p className="planner-eyebrow">Make something from what you have</p><h2 id="fridge-title">What’s in your fridge?</h2><p>Upload a photo and AI will spot ingredients and suggest three recipes.</p></div>
-        {premium ? <span className="premium-badge">Plus plan active</span> : <span className="premium-price">${(priceCents / 100).toFixed(2)}/month</span>}
       </div>
 
       {!premium ? (
-        <div className="fridge-unlock"><p>Fridge scans and AI recipe ideas are included with Meal Prep Assistant Plus.</p><button className="planner-primary" type="button" onClick={startCheckout} disabled={checkoutPending}>{checkoutPending ? "Opening checkout…" : `Subscribe to Plus · ${(priceCents / 100).toFixed(2)}/month`}</button></div>
+        <p className="fridge-unlock" role="status">Fridge scans are included in your Meal Prep Assistant subscription. We couldn’t confirm access for this account.</p>
       ) : (
         <>
           <form className="fridge-upload-form" onSubmit={scanFridge}>
