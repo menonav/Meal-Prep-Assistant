@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+function ingredientMatchKey(name) {
+  return name.trim().toLowerCase().replace(/^(carton|block|bag|bunch|head) of\s+/, "");
+}
+
 export default function FridgeAssistant({ premium, onAddRecipe }) {
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
@@ -33,14 +37,31 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
       const response = await fetch("/api/ai/fridge", { method: "POST", body: form });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not scan this photo.");
-      setIngredients(payload.ingredients || []);
-      setRecipes(payload.recipes || []);
+      const spotted = payload.ingredients || [];
+      const spottedNames = new Set(spotted.map(ingredientMatchKey));
+      setIngredients(spotted);
+      setRecipes((payload.recipes || []).map((recipe) => ({
+        ...recipe,
+        ingredients: recipe.ingredients.map((ingredient) => ({
+          ...ingredient,
+          onHand: spottedNames.has(ingredientMatchKey(ingredient.name)),
+        })),
+      })));
       setRemainingScans(payload.remainingScans);
     } catch (scanError) {
       setError(scanError.message);
     } finally {
       setPending(false);
     }
+  }
+
+  function setIngredientOnHand(recipeIndex, ingredientIndex, onHand) {
+    setRecipes((current) => current.map((recipe, index) => index !== recipeIndex ? recipe : {
+      ...recipe,
+      ingredients: recipe.ingredients.map((ingredient, i) => (
+        i === ingredientIndex ? { ...ingredient, onHand } : ingredient
+      )),
+    }));
   }
 
   function addRecipe(recipe) {
@@ -71,12 +92,25 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
       {error && <p className="fridge-error" role="alert">{error}</p>}
       {message && <p className="fridge-success" role="status">{message}</p>}
       {recipes.length > 0 && <div className="fridge-results">
-        <div className="fridge-result-heading"><h3>Here’s what I spotted</h3><p>{ingredients.join(" · ")}</p></div>
+        <div className="fridge-result-heading">
+          <h3>Here’s what I spotted</h3>
+          <p>{ingredients.join(" · ")}</p>
+          <p>Before adding a recipe, check the ingredients you have enough of. The shopping list only adds what you still need.</p>
+        </div>
         <label className="fridge-day-select">Add recipes to <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
         <div className="fridge-recipe-grid">{recipes.map((recipe, index) => <article className="fridge-recipe-card" key={`${recipe.title}-${index}`}>
           <p className="fridge-recipe-meta"><span>{recipe.emoji}</span> {recipe.time} min · serves {recipe.servings}</p>
           <h3>{recipe.title}</h3>
-          <ul>{recipe.ingredients.map((ingredient, i) => <li key={`${ingredient.name}-${i}`}>{ingredient.amount} {ingredient.unit} {ingredient.name}</li>)}</ul>
+          <ul aria-label="Ingredients you have enough of">
+            {recipe.ingredients.map((ingredient, i) => (
+              <li key={`${ingredient.name}-${i}`}>
+                <label>
+                  <input type="checkbox" checked={ingredient.onHand} onChange={(event) => setIngredientOnHand(index, i, event.target.checked)} />
+                  {" "}{ingredient.amount} {ingredient.unit} {ingredient.name}
+                </label>
+              </li>
+            ))}
+          </ul>
           <ol>{recipe.steps.map((step, i) => <li key={`${i}-${step}`}>{step}</li>)}</ol>
           <button type="button" className="planner-primary" onClick={() => addRecipe(recipe)}>Add to { ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][dayIndex] }</button>
         </article>)}</div>
