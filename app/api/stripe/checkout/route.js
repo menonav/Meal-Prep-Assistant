@@ -25,9 +25,9 @@ export async function POST(request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Stripe checkout is not configured yet." }, { status: 503 });
   }
-  const amount = Number.parseInt(process.env.STRIPE_PRICE_CENTS || "100", 10);
-  if (!Number.isInteger(amount) || amount < 50 || amount > 1_000_000) {
-    return NextResponse.json({ error: "The premium price is not configured correctly." }, { status: 503 });
+  const priceId = process.env.STRIPE_PRICE_ID;
+  if (!priceId) {
+    return NextResponse.json({ error: "The monthly subscription price is not configured yet." }, { status: 503 });
   }
 
   try {
@@ -38,15 +38,7 @@ export async function POST(request) {
       mode: "subscription",
       line_items: [{
         quantity: 1,
-        price_data: {
-          currency: "usd",
-          unit_amount: amount,
-          recurring: { interval: "month" },
-          product_data: {
-            name: "Meal Prep Assistant Premium",
-            description: "Monthly access to AI fridge photo scans and recipe suggestions",
-          },
-        },
+        price: priceId,
       }],
       customer_email: user.email,
       metadata,
