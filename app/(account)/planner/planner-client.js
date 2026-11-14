@@ -77,9 +77,11 @@ function shoppingItems(week) {
     const recipe = meal.recipe || RECIPES.find((candidate) => candidate.id === meal.recipeId);
     if (!recipe) continue;
     for (const ingredient of recipe.ingredients) {
+      const requiredAmount = ingredient.amount * (meal.servings / recipe.servings);
+      const amount = requiredAmount - (ingredient.onHand === true ? ingredient.amount : 0);
+      if (amount <= 0) continue;
       const key = `${ingredient.name.toLowerCase()}|${ingredient.unit}`;
       const existing = items.get(key);
-      const amount = ingredient.amount * (meal.servings / recipe.servings);
       items.set(key, {
         key,
         name: ingredient.name,
@@ -353,7 +355,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
         </>
       ) : (
         <section className="shopping-panel">
-          <div className="shopping-heading"><div><p className="planner-eyebrow">Everything in one place</p><h2>Your shopping list</h2><p>Ingredients are combined from this week’s planned meals.</p></div><span className="shopping-count">{generatedItems.length + week.extras.length} items</span></div>
+          <div className="shopping-heading"><div><p className="planner-eyebrow">Everything in one place</p><h2>Your shopping list</h2><p>This list combines what you still need for this week’s meals.</p></div><span className="shopping-count">{generatedItems.length + week.extras.length} items</span></div>
           {groupedItems.length ? <div className="shopping-groups">
             {groupedItems.map(([category, items]) => <section className="shopping-group" key={category}>
               <h3>{category}<span>{items.filter((item) => week.checked[item.key]).length}/{items.length}</span></h3>
@@ -363,7 +365,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
                 {item.category === "Added by you" && <button className="remove-grocery" type="button" aria-label={`Remove ${item.name}`} onClick={() => removeCustomItem(item.key)}>×</button>}
               </li>)}</ul>
             </section>)}
-          </div> : <div className="shopping-empty"><span aria-hidden="true">🛒</span><h3>Your list is waiting for a meal.</h3><p>Add a recipe to your weekly plan and its ingredients will show up here.</p><button type="button" className="planner-primary" onClick={() => setTab("plan")}>Plan a meal</button></div>}
+          </div> : <div className="shopping-empty"><span aria-hidden="true">🛒</span><h3>{week.meals.length ? "Nothing to buy for your planned meals." : "Your list is waiting for a meal."}</h3>{!week.meals.length && <p>Add a recipe to your weekly plan and its ingredients will show up here.</p>}<button type="button" className="planner-primary" onClick={() => setTab("plan")}>Plan a meal</button></div>}
           <form className="custom-item-form" onSubmit={addCustomItem}><label className="sr-only" htmlFor="custom-grocery">Add a grocery item</label><input id="custom-grocery" value={customItem} onChange={(event) => setCustomItem(event.target.value)} placeholder="Add something else to your list" /><button type="submit" disabled={!customItem.trim()}>Add item</button></form>
           <div className="planner-sync-notice" aria-live="polite">
             {legacyPlans && <p>We found a plan saved in this browser. <button type="button" onClick={importLegacyPlans}>Import it to this account</button></p>}
