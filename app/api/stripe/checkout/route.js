@@ -25,7 +25,7 @@ export async function POST(request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Stripe checkout is not configured yet." }, { status: 503 });
   }
-  const priceId = process.env.STRIPE_PRICE_ID;
+  const priceId = process.env.STRIPE_PRICE_ID || "price_1Ua5KUDpv9sPAKUVzVvp32dD";
   if (!priceId) {
     return NextResponse.json({ error: "The monthly subscription price is not configured yet." }, { status: 503 });
   }
