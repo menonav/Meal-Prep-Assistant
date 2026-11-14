@@ -62,7 +62,7 @@ export async function POST(request) {
   if (authError) return authError;
   try {
     if (!(await hasPremiumAccess(user))) {
-      return NextResponse.json({ error: "Unlock premium to get AI recipes from your fridge photo." }, { status: 402 });
+      return NextResponse.json({ error: "Subscribe to Meal Prep Assistant Plus to use AI recipes from your fridge photo." }, { status: 402 });
     }
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI recipes are not configured yet." }, { status: 503 });
