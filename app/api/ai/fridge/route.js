@@ -114,7 +114,22 @@ export async function POST(request) {
       signal: AbortSignal.timeout(45_000),
     });
     if (!upstream.ok) {
-      return NextResponse.json({ error: "The AI couldn’t read this photo. Please try a clearer picture." }, { status: 502 });
+      const result = await upstream.json().catch(() => null);
+      const code = result?.error?.code;
+      const requestId = upstream.headers.get("x-request-id");
+      const safeCode = typeof code === "string" && /^[a-z0-9_]{1,64}$/.test(code) ? code : "unknown";
+      console.warn("[fridge-ai] API request failed", { status: upstream.status, code: safeCode, requestId });
+
+      if (["invalid_image", "invalid_image_format", "invalid_base64_image", "image_parse_error", "unsupported_image_media_type"].includes(code)) {
+        return NextResponse.json({ error: "The photo file couldn’t be read. Export it as a JPEG or PNG and try again." }, { status: 422 });
+      }
+      if (code === "insufficient_quota" || result?.error?.type === "insufficient_quota") {
+        return NextResponse.json({ error: "Recipe scans are unavailable because the AI service has reached its API quota." }, { status: 503 });
+      }
+      if (upstream.status === 429) {
+        return NextResponse.json({ error: "The AI service is busy. Try again in a minute." }, { status: 503 });
+      }
+      return NextResponse.json({ error: "The AI service couldn’t complete the scan." }, { status: 502 });
     }
     const payload = await upstream.json();
     const outputText = payload.output?.flatMap((item) => item.content || []).find((item) => item.type === "output_text")?.text;
