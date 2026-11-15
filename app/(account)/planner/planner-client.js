@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./planner.css";
 import FridgeAssistant from "./fridge-assistant";
+import CookingMode from "./cooking-mode";
 
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const RECIPES = [
   {
     id: "chickpea-bowl", title: "Crispy chickpea bowls", emoji: "🥙", time: 25, servings: 2,
+    steps: [
+      "Cook the rice according to the package directions.",
+      "Drain, rinse, and pat dry the chickpeas. Sauté with a little oil over medium-high heat until golden, stirring occasionally.",
+      "Dice the cucumber. Divide the rice into bowls, then top with the chickpeas, cucumber, and yogurt. Season to taste.",
+    ],
     ingredients: [
       { name: "chickpeas", amount: 1, unit: "can", category: "Produce & pantry" },
       { name: "rice", amount: 1, unit: "cup", category: "Produce & pantry" },
@@ -19,6 +25,11 @@ const RECIPES = [
   },
   {
     id: "tomato-pasta", title: "Creamy tomato pasta", emoji: "🍝", time: 20, servings: 2,
+    steps: [
+      "Cook the pasta according to the package directions. Reserve a little pasta water before draining.",
+      "Halve the cherry tomatoes. Cook them in a skillet over medium heat until they soften, then stir in the spinach until it wilts.",
+      "Add the cream and simmer gently for a few minutes. Toss with the pasta and loosen with a splash of pasta water if needed.",
+    ],
     ingredients: [
       { name: "pasta", amount: 8, unit: "oz", category: "Produce & pantry" },
       { name: "cherry tomatoes", amount: 2, unit: "cups", category: "Produce & pantry" },
@@ -28,6 +39,11 @@ const RECIPES = [
   },
   {
     id: "veggie-fried-rice", title: "Easy veggie fried rice", emoji: "🍚", time: 18, servings: 2,
+    steps: [
+      "Cook the rice if needed, or use rice that was promptly refrigerated after cooking. Beat the eggs in a bowl.",
+      "Heat a little oil in a large skillet. Scramble the eggs until set, transfer them to a plate, then cook the frozen vegetables according to the package directions.",
+      "Add the rice and soy sauce. Stir-fry until the rice is steaming hot throughout, then fold in the eggs and serve.",
+    ],
     ingredients: [
       { name: "rice", amount: 1.5, unit: "cup", category: "Produce & pantry" },
       { name: "frozen mixed vegetables", amount: 1, unit: "cup", category: "Frozen" },
@@ -37,6 +53,11 @@ const RECIPES = [
   },
   {
     id: "chicken-wraps", title: "Chicken crunch wraps", emoji: "🌯", time: 22, servings: 2,
+    steps: [
+      "Slice the chicken into strips. Wash and shred the lettuce on a clean board separate from the raw chicken.",
+      "Heat a little oil in a skillet over medium-high heat. Cook the chicken until the thickest piece reaches 165°F (74°C) on a food thermometer.",
+      "Warm the tortillas. Add the chicken, lettuce, and cheese, then fold the wraps and serve.",
+    ],
     ingredients: [
       { name: "chicken breast", amount: 10, unit: "oz", category: "Meat & seafood" },
       { name: "tortillas", amount: 2, unit: "each", category: "Produce & pantry" },
@@ -106,6 +127,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
   const [weekStart, setWeekStart] = useState(null);
   const [weekPlans, setWeekPlans] = useState({});
   const [tab, setTab] = useState("plan");
+  const [cooking, setCooking] = useState(null);
   const [selectedRecipes, setSelectedRecipes] = useState({});
   const [customItem, setCustomItem] = useState("");
   const [ready, setReady] = useState(false);
@@ -290,6 +312,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
 
   return (
     <main className="planner-page">
+      {cooking && <CookingMode recipe={cooking.recipe} servings={cooking.servings} premium={premium} onClose={() => setCooking(null)} />}
       <div className="planner-topline">
         <div>
           <p className="planner-eyebrow">A little plan goes a long way</p>
@@ -328,7 +351,9 @@ export default function PlannerClient({ userId, premium, priceCents }) {
                       return (
                         <div className="planned-meal" key={meal.id}>
                           <span className="meal-emoji" aria-hidden="true">{recipe.emoji}</span>
-                          <div className="meal-info"><strong>{recipe.title}</strong><small>{recipe.time} min · {meal.servings} servings</small><div className="serving-controls"><button type="button" aria-label={`Decrease servings for ${recipe.title}`} onClick={() => changeServings(meal.id, -1)}>−</button><span>{meal.servings}</span><button type="button" aria-label={`Increase servings for ${recipe.title}`} onClick={() => changeServings(meal.id, 1)}>+</button></div></div>
+                          <div className="meal-info"><strong>{recipe.title}</strong><small>{recipe.time} min · {meal.servings} servings</small><div className="serving-controls"><button type="button" aria-label={`Decrease servings for ${recipe.title}`} onClick={() => changeServings(meal.id, -1)}>−</button><span>{meal.servings}</span><button type="button" aria-label={`Increase servings for ${recipe.title}`} onClick={() => changeServings(meal.id, 1)}>+</button></div>
+                            <button type="button" className="start-cooking" aria-label={`Start cooking ${recipe.title}`} onClick={() => setCooking({ recipe, servings: meal.servings })}>Start cooking</button>
+                          </div>
                           <button className="remove-meal" type="button" onClick={() => removeMeal(meal.id)} aria-label={`Remove ${recipe.title}`}>×</button>
                         </div>
                       );
