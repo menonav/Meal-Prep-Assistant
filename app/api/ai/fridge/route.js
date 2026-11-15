@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { FRIDGE_DAILY_LIMIT } from "../../../../lib/fridge-limits";
 import { getAuth } from "../../../../lib/auth/server";
 import { consumeAiQuota, hasPremiumAccess } from "../../../../lib/app-data";
 
@@ -83,9 +84,9 @@ export async function POST(request) {
     let previousTitles = [];
     if (rawTitles !== null) {
       try {
-        if (typeof rawTitles !== "string" || rawTitles.length > 5000) throw new Error();
+        if (typeof rawTitles !== "string" || rawTitles.length > 16_000) throw new Error();
         previousTitles = JSON.parse(rawTitles);
-        if (!Array.isArray(previousTitles) || previousTitles.length > 15
+        if (!Array.isArray(previousTitles) || previousTitles.length > (FRIDGE_DAILY_LIMIT - 1) * 3
           || previousTitles.some((title) => typeof title !== "string" || title.length > 220)) throw new Error();
       } catch {
         return NextResponse.json({ error: "Could not read the earlier recipe ideas." }, { status: 400 });
@@ -93,9 +94,9 @@ export async function POST(request) {
     }
     const calls = await consumeAiQuota(user.id);
     if (calls === null) {
-      return NextResponse.json({ error: "You’ve used today’s five AI recipe scans. Try again tomorrow.", remainingScans: 0 }, { status: 429 });
+      return NextResponse.json({ error: `You’ve used today’s ${FRIDGE_DAILY_LIMIT} AI recipe scans. Try again tomorrow.`, remainingScans: 0 }, { status: 429 });
     }
-    const remainingScans = Math.max(0, 5 - calls);
+    const remainingScans = Math.max(0, FRIDGE_DAILY_LIMIT - calls);
     const bytes = Buffer.from(await image.arrayBuffer());
     const imageUrl = `data:${image.type};base64,${bytes.toString("base64")}`;
     const upstream = await fetch("https://api.openai.com/v1/responses", {

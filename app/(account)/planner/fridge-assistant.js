@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FRIDGE_DAILY_LIMIT } from "../../../lib/fridge-limits";
 
 function ingredientMatchKey(name) {
   return name.trim().toLowerCase().replace(/^(carton|block|bag|bunch|head) of\s+/, "");
@@ -99,7 +100,7 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
             <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
             {preview && <img className="fridge-photo-preview" src={preview} alt="Selected fridge contents" />}
             {ideaSets.length === 0 && <button className="planner-primary" type="submit" disabled={!photo || pending || remainingScans === 0}>{pending ? "Finding ingredients…" : "Find recipe ideas"}</button>}
-            <span className="fridge-usage">{remainingScans === null ? "Up to 5 scans per day" : `${remainingScans} scans left today`}</span>
+            <span className="fridge-usage">{remainingScans === null ? `Up to ${FRIDGE_DAILY_LIMIT} scans per day` : `${remainingScans} scans left today`}</span>
           </form>
           <p className="fridge-privacy-note">The photo is sent securely for analysis and isn’t saved in your plan. AI can misread ingredients; check labels and food freshness yourself.</p>
         </>
