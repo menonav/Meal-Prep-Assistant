@@ -7,7 +7,7 @@ function ingredientMatchKey(name) {
   return name.trim().toLowerCase().replace(/^(carton|block|bag|bunch|head) of\s+/, "");
 }
 
-export default function FridgeAssistant({ premium, onAddRecipe }) {
+export default function FridgeAssistant({ premium, onAddRecipe, onInventorySaved }) {
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
   const [ideaSets, setIdeaSets] = useState([]);
@@ -54,6 +54,12 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
       const nextSet = { recipes: nextRecipes, ingredients: spotted };
       setIdeaSets((current) => isRegeneration ? [...current, nextSet] : [nextSet]);
       setSetIndex(isRegeneration ? ideaSets.length : 0);
+      if (payload.inventorySaved === true) {
+        onInventorySaved();
+        if (spotted.length > 0) setMessage("Ingredients saved to In fridge.");
+      } else if (payload.inventorySaved === false) {
+        setError("Recipe ideas are ready, but your fridge list couldn’t be updated.");
+      }
     } catch (scanError) {
       setError(scanError.message);
     } finally {

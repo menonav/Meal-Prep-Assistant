@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./planner.css";
 import FridgeAssistant from "./fridge-assistant";
+import FridgeInventory from "./fridge-inventory";
 import CookingMode from "./cooking-mode";
 
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
@@ -68,6 +69,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
   const [weekStart, setWeekStart] = useState(null);
   const [weekPlans, setWeekPlans] = useState({});
   const [tab, setTab] = useState("plan");
+  const [fridgeScanVersion, setFridgeScanVersion] = useState(0);
   const [cooking, setCooking] = useState(null);
   const [selectedRecipes, setSelectedRecipes] = useState({});
   const [customItem, setCustomItem] = useState("");
@@ -263,7 +265,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
         <Link className="planner-back" href="/dashboard">← Your account</Link>
       </div>
 
-      {premium ? <FridgeAssistant premium={premium} onAddRecipe={addAiMeal} /> : (
+      {premium ? <FridgeAssistant premium={premium} onAddRecipe={addAiMeal} onInventorySaved={() => setFridgeScanVersion((version) => version + 1)} /> : (
         <section className="fridge-assistant">
           <div className="fridge-heading"><div><h2>Meal Prep Assistant Plus</h2><p>Plus includes the shopping list, fridge scans, step-by-step cooking, and the AI coach.</p></div></div>
         </section>
@@ -278,8 +280,11 @@ export default function PlannerClient({ userId, premium, recipes }) {
         <div className="planner-tabs" role="tablist" aria-label="Meal planner views">
           <button type="button" role="tab" aria-selected={tab === "plan"} className={tab === "plan" ? "active" : ""} onClick={() => setTab("plan")}>Weekly plan <span>{plannedCount}</span></button>
           <button type="button" role="tab" disabled={!premium} aria-selected={premium && tab === "list"} className={premium && tab === "list" ? "active" : ""} onClick={() => setTab("list")}>Shopping list {premium ? <span>{checkedCount}/{generatedItems.length + week.extras.length}</span> : <span>Plus</span>}</button>
+          {premium && <button type="button" role="tab" aria-selected={tab === "fridge"} className={tab === "fridge" ? "active" : ""} onClick={() => setTab("fridge")}>In fridge</button>}
         </div>
       </div>
+
+      {premium && <FridgeInventory open={tab === "fridge"} scanVersion={fridgeScanVersion} onOpen={() => setTab("fridge")} />}
 
       {!premium || tab === "plan" ? (
         <>
@@ -324,7 +329,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
           </div>
         </>
       ) : (
-        <section className="shopping-panel">
+        tab === "list" && <section className="shopping-panel">
           <div className="shopping-heading"><div><p className="planner-eyebrow">Everything in one place</p><h2>Your shopping list</h2><p>This list combines what you still need for this week’s meals.</p></div><span className="shopping-count">{generatedItems.length + week.extras.length} items</span></div>
           {groupedItems.length ? <div className="shopping-groups">
             {groupedItems.map(([category, items]) => <section className="shopping-group" key={category}>

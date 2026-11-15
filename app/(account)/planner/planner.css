@@ -26,3 +26,19 @@
 .cooking-answer{border-radius:8px;background:#f2f1e9;margin-top:10px;padding:10px 12px;overflow-wrap:anywhere}
 .cooking-answer p{white-space:pre-line;margin:6px 0 0;line-height:1.55}
 .cooking-dialog :focus-visible,.start-cooking:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+.fridge-reminder{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;padding:10px 14px;border:1px solid var(--line);border-radius:9px;background:#f8eee3;font-size:13px}
+.fridge-reminder p{margin:0;line-height:1.5}
+.fridge-reminder button{flex:none}
+.fridge-item-list{list-style:none;padding:0;margin:0}
+.fridge-item-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.fridge-item-info,.fridge-item-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.fridge-item-info{font-size:13px;overflow-wrap:anywhere}
+.fridge-item-info span{color:var(--muted);font-size:12px}
+.fridge-item-info .fridge-date-status{background:#f7eee5;border-radius:14px;padding:4px 7px;color:#824024;font-weight:700}
+.fridge-item-form{display:flex;flex-wrap:wrap;align-items:end;gap:9px;margin-top:16px}
+.fridge-item-form label{display:grid;gap:5px;font-size:12px}
+.fridge-item-form label:first-child{flex:1;min-width:150px}
+.fridge-item-form input{min-width:0;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--ink);background:#fffef9;font:inherit}
+.fridge-item-form button:disabled{opacity:.45;cursor:default}
+@media(max-width:460px){.fridge-item-list li{align-items:flex-start;flex-direction:column}.fridge-item-form label:first-child{flex-basis:100%}}

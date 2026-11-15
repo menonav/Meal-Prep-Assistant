@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { FRIDGE_DAILY_LIMIT } from "../../../../lib/fridge-limits";
 import { getAuth } from "../../../../lib/auth/server";
-import { consumeAiQuota, hasPremiumAccess } from "../../../../lib/app-data";
+import { consumeAiQuota, hasPremiumAccess, saveScannedFridgeItems } from "../../../../lib/app-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -159,7 +159,17 @@ export async function POST(request) {
     if (titles.length !== 3 || new Set(titles).size !== 3 || titles.some((title) => earlierNames.has(title))) {
       return NextResponse.json({ error: "Couldn’t find three fresh recipes this time.", remainingScans }, { status: 502 });
     }
-    return NextResponse.json({ ...suggestions, remainingScans });
+    let inventorySaved = null;
+    if (rawTitles === null) {
+      try {
+        await saveScannedFridgeItems(user.id, suggestions.ingredients);
+        inventorySaved = true;
+      } catch {
+        inventorySaved = false;
+        console.warn("[fridge-inventory] Could not save scanned ingredients");
+      }
+    }
+    return NextResponse.json({ ...suggestions, remainingScans, inventorySaved });
   } catch {
     return NextResponse.json({ error: "AI recipe service is temporarily unavailable." }, { status: 503 });
   }
