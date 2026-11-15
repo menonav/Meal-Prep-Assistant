@@ -8,65 +8,6 @@ import CookingMode from "./cooking-mode";
 
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const RECIPES = [
-  {
-    id: "chickpea-bowl", title: "Crispy chickpea bowls", emoji: "🥙", time: 25, servings: 2,
-    steps: [
-      "Cook the rice according to the package directions.",
-      "Drain, rinse, and pat dry the chickpeas. Sauté with a little oil over medium-high heat until golden, stirring occasionally.",
-      "Dice the cucumber. Divide the rice into bowls, then top with the chickpeas, cucumber, and yogurt. Season to taste.",
-    ],
-    ingredients: [
-      { name: "chickpeas", amount: 1, unit: "can", category: "Produce & pantry" },
-      { name: "rice", amount: 1, unit: "cup", category: "Produce & pantry" },
-      { name: "cucumber", amount: 1, unit: "each", category: "Produce & pantry" },
-      { name: "plain yogurt", amount: 0.5, unit: "cup", category: "Dairy" },
-    ],
-  },
-  {
-    id: "tomato-pasta", title: "Creamy tomato pasta", emoji: "🍝", time: 20, servings: 2,
-    steps: [
-      "Cook the pasta according to the package directions. Reserve a little pasta water before draining.",
-      "Halve the cherry tomatoes. Cook them in a skillet over medium heat until they soften, then stir in the spinach until it wilts.",
-      "Add the cream and simmer gently for a few minutes. Toss with the pasta and loosen with a splash of pasta water if needed.",
-    ],
-    ingredients: [
-      { name: "pasta", amount: 8, unit: "oz", category: "Produce & pantry" },
-      { name: "cherry tomatoes", amount: 2, unit: "cups", category: "Produce & pantry" },
-      { name: "spinach", amount: 2, unit: "cups", category: "Produce & pantry" },
-      { name: "heavy cream", amount: 0.5, unit: "cup", category: "Dairy" },
-    ],
-  },
-  {
-    id: "veggie-fried-rice", title: "Easy veggie fried rice", emoji: "🍚", time: 18, servings: 2,
-    steps: [
-      "Cook the rice if needed, or use rice that was promptly refrigerated after cooking. Beat the eggs in a bowl.",
-      "Heat a little oil in a large skillet. Scramble the eggs until set, transfer them to a plate, then cook the frozen vegetables according to the package directions.",
-      "Add the rice and soy sauce. Stir-fry until the rice is steaming hot throughout, then fold in the eggs and serve.",
-    ],
-    ingredients: [
-      { name: "rice", amount: 1.5, unit: "cup", category: "Produce & pantry" },
-      { name: "frozen mixed vegetables", amount: 1, unit: "cup", category: "Frozen" },
-      { name: "eggs", amount: 2, unit: "each", category: "Dairy" },
-      { name: "soy sauce", amount: 2, unit: "tbsp", category: "Produce & pantry" },
-    ],
-  },
-  {
-    id: "chicken-wraps", title: "Chicken crunch wraps", emoji: "🌯", time: 22, servings: 2,
-    steps: [
-      "Slice the chicken into strips. Wash and shred the lettuce on a clean board separate from the raw chicken.",
-      "Heat a little oil in a skillet over medium-high heat. Cook the chicken until the thickest piece reaches 165°F (74°C) on a food thermometer.",
-      "Warm the tortillas. Add the chicken, lettuce, and cheese, then fold the wraps and serve.",
-    ],
-    ingredients: [
-      { name: "chicken breast", amount: 10, unit: "oz", category: "Meat & seafood" },
-      { name: "tortillas", amount: 2, unit: "each", category: "Produce & pantry" },
-      { name: "lettuce", amount: 2, unit: "cups", category: "Produce & pantry" },
-      { name: "shredded cheese", amount: 0.5, unit: "cup", category: "Dairy" },
-    ],
-  },
-];
-
 const EMPTY_WEEK = { meals: [], extras: [], checked: {} };
 
 function weekStartFor(date) {
@@ -92,10 +33,10 @@ function formatAmount(amount) {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
-function shoppingItems(week) {
+function shoppingItems(week, recipes) {
   const items = new Map();
   for (const meal of week.meals) {
-    const recipe = meal.recipe || RECIPES.find((candidate) => candidate.id === meal.recipeId);
+    const recipe = meal.recipe || recipes.find((candidate) => candidate.id === meal.recipeId);
     if (!recipe) continue;
     for (const ingredient of recipe.ingredients) {
       const requiredAmount = ingredient.amount * (meal.servings / recipe.servings);
@@ -123,7 +64,7 @@ function hasSavedPlans(plans) {
   return Boolean(plans && typeof plans === "object" && Object.keys(plans).length);
 }
 
-export default function PlannerClient({ userId, premium, priceCents }) {
+export default function PlannerClient({ userId, premium, recipes }) {
   const [weekStart, setWeekStart] = useState(null);
   const [weekPlans, setWeekPlans] = useState({});
   const [tab, setTab] = useState("plan");
@@ -222,7 +163,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
 
   const currentKey = weekStart ? dateKey(weekStart) : "";
   const week = weekPlans[currentKey] || EMPTY_WEEK;
-  const generatedItems = useMemo(() => shoppingItems(week), [week]);
+  const generatedItems = useMemo(() => premium ? shoppingItems(week, recipes) : [], [premium, week, recipes]);
   const groupedItems = useMemo(() => {
     const groups = new Map();
     for (const item of generatedItems) {
@@ -312,17 +253,21 @@ export default function PlannerClient({ userId, premium, priceCents }) {
 
   return (
     <main className="planner-page">
-      {cooking && <CookingMode recipe={cooking.recipe} servings={cooking.servings} premium={premium} onClose={() => setCooking(null)} />}
+      {premium && cooking && <CookingMode recipe={cooking.recipe} servings={cooking.servings} premium={premium} onClose={() => setCooking(null)} />}
       <div className="planner-topline">
         <div>
           <p className="planner-eyebrow">A little plan goes a long way</p>
           <h1>Your week, made easier.</h1>
-          <p className="planner-subtitle">Choose a few meals. We’ll pull the ingredients you need into one shopping list.</p>
+          <p className="planner-subtitle">Choose a few meals and build your weekly plan.</p>
         </div>
         <Link className="planner-back" href="/dashboard">← Your account</Link>
       </div>
 
-      <FridgeAssistant premium={premium} priceCents={priceCents} onAddRecipe={addAiMeal} />
+      {premium ? <FridgeAssistant premium={premium} onAddRecipe={addAiMeal} /> : (
+        <section className="fridge-assistant">
+          <div className="fridge-heading"><div><h2>Meal Prep Assistant Plus</h2><p>Plus includes the shopping list, fridge scans, step-by-step cooking, and the AI coach.</p></div></div>
+        </section>
+      )}
 
       <div className="planner-controls">
         <div className="week-switcher" aria-label="Choose week">
@@ -332,11 +277,11 @@ export default function PlannerClient({ userId, premium, priceCents }) {
         </div>
         <div className="planner-tabs" role="tablist" aria-label="Meal planner views">
           <button type="button" role="tab" aria-selected={tab === "plan"} className={tab === "plan" ? "active" : ""} onClick={() => setTab("plan")}>Weekly plan <span>{plannedCount}</span></button>
-          <button type="button" role="tab" aria-selected={tab === "list"} className={tab === "list" ? "active" : ""} onClick={() => setTab("list")}>Shopping list <span>{checkedCount}/{generatedItems.length + week.extras.length}</span></button>
+          <button type="button" role="tab" disabled={!premium} aria-selected={premium && tab === "list"} className={premium && tab === "list" ? "active" : ""} onClick={() => setTab("list")}>Shopping list {premium ? <span>{checkedCount}/{generatedItems.length + week.extras.length}</span> : <span>Plus</span>}</button>
         </div>
       </div>
 
-      {tab === "plan" ? (
+      {!premium || tab === "plan" ? (
         <>
           <section className="planner-grid" aria-label="Meals by day">
             {DAYS.map((day, index) => {
@@ -346,13 +291,13 @@ export default function PlannerClient({ userId, premium, priceCents }) {
                   <div className="day-heading"><span className="day-monogram">{initialsForDay(day)}</span><div><h2>{day}</h2><p>{prettyDate(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index), { month: "long", day: "numeric" })}</p></div></div>
                   <div className="day-meals">
                     {meals.map((meal) => {
-                      const recipe = meal.recipe || RECIPES.find((candidate) => candidate.id === meal.recipeId);
+                      const recipe = meal.recipe || recipes.find((candidate) => candidate.id === meal.recipeId);
                       if (!recipe) return null;
                       return (
                         <div className="planned-meal" key={meal.id}>
                           <span className="meal-emoji" aria-hidden="true">{recipe.emoji}</span>
                           <div className="meal-info"><strong>{recipe.title}</strong><small>{recipe.time} min · {meal.servings} servings</small><div className="serving-controls"><button type="button" aria-label={`Decrease servings for ${recipe.title}`} onClick={() => changeServings(meal.id, -1)}>−</button><span>{meal.servings}</span><button type="button" aria-label={`Increase servings for ${recipe.title}`} onClick={() => changeServings(meal.id, 1)}>+</button></div>
-                            <button type="button" className="start-cooking" aria-label={`Start cooking ${recipe.title}`} onClick={() => setCooking({ recipe, servings: meal.servings })}>Start cooking</button>
+                            {premium && <button type="button" className="start-cooking" aria-label={`Start cooking ${recipe.title}`} onClick={() => setCooking({ recipe, servings: meal.servings })}>Start cooking</button>}
                           </div>
                           <button className="remove-meal" type="button" onClick={() => removeMeal(meal.id)} aria-label={`Remove ${recipe.title}`}>×</button>
                         </div>
@@ -364,7 +309,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
                     <label className="sr-only" htmlFor={`recipe-${index}`}>Choose a recipe for {day}</label>
                     <select id={`recipe-${index}`} value={selectedRecipes[index] || ""} onChange={(event) => setSelectedRecipes((current) => ({ ...current, [index]: event.target.value }))}>
                       <option value="">Add a meal…</option>
-                      {RECIPES.map((recipe) => <option value={recipe.id} key={recipe.id}>{recipe.title}</option>)}
+                      {recipes.map((recipe) => <option value={recipe.id} key={recipe.id}>{recipe.title}</option>)}
                     </select>
                     <button type="submit" disabled={!selectedRecipes[index]} aria-label={`Add meal to ${day}`}>+</button>
                   </form>
@@ -372,7 +317,7 @@ export default function PlannerClient({ userId, premium, priceCents }) {
               );
             })}
           </section>
-          <div className="planner-tip"><span aria-hidden="true">✦</span><p><strong>Start small.</strong> Add the meals you know you’ll make; the list updates as you plan.</p><button type="button" onClick={() => setTab("list")}>See shopping list →</button></div>
+          {premium && <div className="planner-tip"><span aria-hidden="true">✦</span><p><strong>Start small.</strong> Add the meals you know you’ll make; the list updates as you plan.</p><button type="button" onClick={() => setTab("list")}>See shopping list →</button></div>}
           <div className="planner-sync-notice" aria-live="polite">
             {legacyPlans && <p>We found a plan saved in this browser. <button type="button" onClick={importLegacyPlans}>Import it to this account</button></p>}
             <p className={syncMode === "local" ? "planner-storage-note" : "planner-sync-status"}>{syncMode === "cloud" ? (syncStatus || "Saved to your account.") : (syncStatus || "Loading your account plan…")}</p>
