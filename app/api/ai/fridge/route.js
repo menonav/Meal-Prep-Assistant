@@ -79,10 +79,23 @@ export async function POST(request) {
     if (!ALLOWED_TYPES.has(image.type) || image.size <= 0 || image.size > MAX_IMAGE_BYTES) {
       return NextResponse.json({ error: "Use a JPEG, PNG, or WebP photo smaller than 4 MB." }, { status: 400 });
     }
+    const rawTitles = form.get("previousTitles");
+    let previousTitles = [];
+    if (rawTitles !== null) {
+      try {
+        if (typeof rawTitles !== "string" || rawTitles.length > 5000) throw new Error();
+        previousTitles = JSON.parse(rawTitles);
+        if (!Array.isArray(previousTitles) || previousTitles.length > 15
+          || previousTitles.some((title) => typeof title !== "string" || title.length > 220)) throw new Error();
+      } catch {
+        return NextResponse.json({ error: "Could not read the earlier recipe ideas." }, { status: 400 });
+      }
+    }
     const calls = await consumeAiQuota(user.id);
     if (calls === null) {
-      return NextResponse.json({ error: "You’ve used today’s five AI recipe scans. Try again tomorrow." }, { status: 429 });
+      return NextResponse.json({ error: "You’ve used today’s five AI recipe scans. Try again tomorrow.", remainingScans: 0 }, { status: 429 });
     }
+    const remainingScans = Math.max(0, 5 - calls);
     const bytes = Buffer.from(await image.arrayBuffer());
     const imageUrl = `data:${image.type};base64,${bytes.toString("base64")}`;
     const upstream = await fetch("https://api.openai.com/v1/responses", {
@@ -94,11 +107,16 @@ export async function POST(request) {
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
         store: false,
-        max_output_tokens: 1800,
+        max_output_tokens: 2400,
         input: [{
           role: "user",
           content: [
-            { type: "input_text", text: "You are Meal Prep Assistant. Inspect the fridge photo and identify only ingredients you can reasonably see; mark uncertain guesses in their wording. Suggest exactly three practical, tasty recipes that primarily use those visible ingredients. Return complete recipes with realistic preparation time, servings, measured ingredients, sensible shopping categories (Produce & pantry, Dairy, Meat & seafood, Frozen, or Spices), and numbered clear cooking steps. Use additional common pantry items sparingly. Never claim food is safe based on an image. Output only the requested structured data." },
+            { type: "input_text", text: [
+              "Identify ingredients you can reasonably see in the fridge photo. Clearly label uncertain guesses. Never claim food is safe from an image.",
+              "Suggest exactly three practical, distinct recipes using some confirmed fridge ingredients in each when available. Two or three visible ingredients in a recipe is enough. Add groceries freely when they make the meal better. Use matching names for confirmed fridge ingredients in the reported ingredient list and the recipes. Never report added groceries as spotted.",
+              "Return realistic prep times and servings, full measured ingredient lists with shopping categories, and clear, concise cooking steps.",
+              "For new ideas, avoid the dishes in this JSON list, including renamed or nearly identical versions: " + JSON.stringify(previousTitles),
+            ].join("\n") },
             { type: "input_image", image_url: imageUrl, detail: "low" },
           ],
         }],
@@ -121,21 +139,26 @@ export async function POST(request) {
       console.warn("[fridge-ai] API request failed", { status: upstream.status, code: safeCode, requestId });
 
       if (["invalid_image", "invalid_image_format", "invalid_base64_image", "image_parse_error", "unsupported_image_media_type"].includes(code)) {
-        return NextResponse.json({ error: "The photo file couldn’t be read. Export it as a JPEG or PNG and try again." }, { status: 422 });
+        return NextResponse.json({ error: "The photo file couldn’t be read. Export it as a JPEG or PNG and try again.", remainingScans }, { status: 422 });
       }
       if (code === "insufficient_quota" || result?.error?.type === "insufficient_quota") {
-        return NextResponse.json({ error: "Recipe scans are unavailable because the AI service has reached its API quota." }, { status: 503 });
+        return NextResponse.json({ error: "Recipe scans are unavailable because the AI service has reached its API quota.", remainingScans }, { status: 503 });
       }
       if (upstream.status === 429) {
-        return NextResponse.json({ error: "The AI service is busy. Try again in a minute." }, { status: 503 });
+        return NextResponse.json({ error: "The AI service is busy. Try again in a minute.", remainingScans }, { status: 503 });
       }
-      return NextResponse.json({ error: "The AI service couldn’t complete the scan." }, { status: 502 });
+      return NextResponse.json({ error: "The AI service couldn’t complete the scan.", remainingScans }, { status: 502 });
     }
     const payload = await upstream.json();
     const outputText = payload.output?.flatMap((item) => item.content || []).find((item) => item.type === "output_text")?.text;
-    if (!outputText) return NextResponse.json({ error: "The AI didn’t return recipe ideas. Please try again." }, { status: 502 });
+    if (!outputText) return NextResponse.json({ error: "The AI didn’t return recipe ideas. Please try again.", remainingScans }, { status: 502 });
     const suggestions = JSON.parse(outputText);
-    return NextResponse.json({ ...suggestions, remainingScans: Math.max(0, 5 - calls) });
+    const earlierNames = new Set(previousTitles.map((title) => title.trim().toLowerCase()));
+    const titles = suggestions.recipes.map((recipe) => recipe.title.trim().toLowerCase());
+    if (titles.length !== 3 || new Set(titles).size !== 3 || titles.some((title) => earlierNames.has(title))) {
+      return NextResponse.json({ error: "Couldn’t find three fresh recipes this time.", remainingScans }, { status: 502 });
+    }
+    return NextResponse.json({ ...suggestions, remainingScans });
   } catch {
     return NextResponse.json({ error: "AI recipe service is temporarily unavailable." }, { status: 503 });
   }

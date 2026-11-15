@@ -9,13 +9,15 @@ function ingredientMatchKey(name) {
 export default function FridgeAssistant({ premium, onAddRecipe }) {
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
-  const [recipes, setRecipes] = useState([]);
-  const [ingredients, setIngredients] = useState([]);
+  const [ideaSets, setIdeaSets] = useState([]);
+  const [setIndex, setSetIndex] = useState(0);
   const [remainingScans, setRemainingScans] = useState(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [dayIndex, setDayIndex] = useState(0);
   const [message, setMessage] = useState("");
+
+  const { recipes = [], ingredients = [] } = ideaSets[setIndex] ?? {};
 
   useEffect(() => {
     if (!photo) { setPreview(""); return; }
@@ -24,30 +26,33 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
     return () => URL.revokeObjectURL(url);
   }, [photo]);
 
-  async function scanFridge(event) {
-    event.preventDefault();
-    if (!photo || pending) return;
+  async function scanFridge(isRegeneration = false) {
+    if (!photo || pending || remainingScans === 0) return;
     setPending(true);
     setError("");
     setMessage("");
-    setRecipes([]);
     const form = new FormData();
     form.set("photo", photo);
+    if (isRegeneration) {
+      form.set("previousTitles", JSON.stringify(ideaSets.flatMap((set) => set.recipes.map((recipe) => recipe.title))));
+    }
     try {
       const response = await fetch("/api/ai/fridge", { method: "POST", body: form });
       const payload = await response.json();
+      if (Number.isInteger(payload.remainingScans)) setRemainingScans(payload.remainingScans);
       if (!response.ok) throw new Error(payload.error || "Could not scan this photo.");
       const spotted = payload.ingredients || [];
       const spottedNames = new Set(spotted.map(ingredientMatchKey));
-      setIngredients(spotted);
-      setRecipes((payload.recipes || []).map((recipe) => ({
+      const nextRecipes = payload.recipes.map((recipe) => ({
         ...recipe,
         ingredients: recipe.ingredients.map((ingredient) => ({
           ...ingredient,
           onHand: spottedNames.has(ingredientMatchKey(ingredient.name)),
         })),
-      })));
-      setRemainingScans(payload.remainingScans);
+      }));
+      const nextSet = { recipes: nextRecipes, ingredients: spotted };
+      setIdeaSets((current) => isRegeneration ? [...current, nextSet] : [nextSet]);
+      setSetIndex(isRegeneration ? ideaSets.length : 0);
     } catch (scanError) {
       setError(scanError.message);
     } finally {
@@ -56,12 +61,23 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
   }
 
   function setIngredientOnHand(recipeIndex, ingredientIndex, onHand) {
-    setRecipes((current) => current.map((recipe, index) => index !== recipeIndex ? recipe : {
-      ...recipe,
-      ingredients: recipe.ingredients.map((ingredient, i) => (
-        i === ingredientIndex ? { ...ingredient, onHand } : ingredient
-      )),
+    setIdeaSets((current) => current.map((set, index) => index !== setIndex ? set : {
+      ...set,
+      recipes: set.recipes.map((recipe, i) => i !== recipeIndex ? recipe : {
+        ...recipe,
+        ingredients: recipe.ingredients.map((ingredient, j) =>
+          j === ingredientIndex ? { ...ingredient, onHand } : ingredient
+        ),
+      }),
     }));
+  }
+
+  function choosePhoto(event) {
+    setPhoto(event.target.files?.[0] || null);
+    setIdeaSets([]);
+    setSetIndex(0);
+    setError("");
+    setMessage("");
   }
 
   function addRecipe(recipe) {
@@ -79,10 +95,10 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
         <p className="fridge-unlock" role="status">Fridge scans are included in your Meal Prep Assistant subscription. We couldn’t confirm access for this account.</p>
       ) : (
         <>
-          <form className="fridge-upload-form" onSubmit={scanFridge}>
-            <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(event.target.files?.[0] || null); setError(""); }} /></label>
+          <form className="fridge-upload-form" onSubmit={(event) => { event.preventDefault(); if (!ideaSets.length) scanFridge(); }}>
+            <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
             {preview && <img className="fridge-photo-preview" src={preview} alt="Selected fridge contents" />}
-            <button className="planner-primary" type="submit" disabled={!photo || pending}>{pending ? "Finding ingredients…" : "Find recipe ideas"}</button>
+            {ideaSets.length === 0 && <button className="planner-primary" type="submit" disabled={!photo || pending || remainingScans === 0}>{pending ? "Finding ingredients…" : "Find recipe ideas"}</button>}
             <span className="fridge-usage">{remainingScans === null ? "Up to 5 scans per day" : `${remainingScans} scans left today`}</span>
           </form>
           <p className="fridge-privacy-note">The photo is sent securely for analysis and isn’t saved in your plan. AI can misread ingredients; check labels and food freshness yourself.</p>
@@ -97,6 +113,18 @@ export default function FridgeAssistant({ premium, onAddRecipe }) {
           <p>{ingredients.join(" · ")}</p>
           <p>Before adding a recipe, check the ingredients you have enough of. The shopping list only adds what you still need.</p>
         </div>
+        <div className="cooking-nav" aria-label="Recipe idea sets">
+          <button type="button" className="cooking-secondary" disabled={pending || setIndex === 0} onClick={() => setSetIndex((index) => index - 1)}>Previous set</button>
+          <span className="fridge-usage" role="status">Set {setIndex + 1} of {ideaSets.length}</span>
+          {setIndex < ideaSets.length - 1 ? (
+            <button type="button" className="cooking-secondary" disabled={pending} onClick={() => setSetIndex((index) => index + 1)}>Next set</button>
+          ) : (
+            <button type="button" className="cooking-secondary" disabled={pending || remainingScans === 0} onClick={() => scanFridge(true)}>
+              {pending ? "Finding more ideas…" : "More recipe ideas"}
+            </button>
+          )}
+        </div>
+        <p className="fridge-privacy-note">Generating a new set uses one daily scan. Revisiting earlier sets doesn’t use a scan.</p>
         <label className="fridge-day-select">Add recipes to <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
         <div className="fridge-recipe-grid">{recipes.map((recipe, index) => <article className="fridge-recipe-card" key={`${recipe.title}-${index}`}>
           <p className="fridge-recipe-meta"><span>{recipe.emoji}</span> {recipe.time} min · serves {recipe.servings}</p>
