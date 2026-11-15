@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "../../../../lib/auth/server";
-import { consumeCoachQuota, hasPremiumAccess } from "../../../../lib/app-data";
+import { COACH_DAILY_LIMIT, consumeCoachQuota, hasPremiumAccess } from "../../../../lib/app-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export async function POST(request) {
       return error("Could not read the question.", 400);
     }
     if (!validRequest(body)) return error("Check the recipe context and keep your question under 500 characters.", 400);
-    if (!(await consumeCoachQuota(data.user.id))) return error("You’ve asked 15 coach questions today. Try again tomorrow.", 429);
+    if (!(await consumeCoachQuota(data.user.id))) return error(`You’ve reached your daily limit of ${COACH_DAILY_LIMIT} coach questions. Try again tomorrow.`, 429);
 
     const { title, ingredients, servings, step } = body.recipe;
     const history = body.history.map(({ question, answer }) => ({ question, answer }));
