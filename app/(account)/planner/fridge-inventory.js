@@ -20,7 +20,7 @@ function formatDate(date) {
     .format(new Date(date + "T00:00:00Z"));
 }
 
-export default function FridgeInventory({ open, scanVersion, onOpen }) {
+export default function FridgeInventory({ open, scanVersion, onOpen, onFindRecipes }) {
   const nameInput = useRef(null);
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -89,11 +89,16 @@ export default function FridgeInventory({ open, scanVersion, onOpen }) {
     changeItem(editingId ? "PATCH" : "POST", { ...draft, id: editingId });
   }
 
+  const [selectedSoonId, setSelectedSoonId] = useState("");
+
   const now = new Date();
   const today = localDateKey(now);
   now.setDate(now.getDate() + 3);
   const soon = localDateKey(now);
   const attention = items.filter((item) => getExpiryStatus(item.expiryDate, today, soon));
+
+  const useSoonItems = attention.filter((item) => item.expiryDate >= today);
+  const soonId = useSoonItems.some((item) => item.id === selectedSoonId) ? selectedSoonId : useSoonItems[0]?.id;
 
   if (!open) {
     if (attention.length === 0) return null;
@@ -108,8 +113,8 @@ export default function FridgeInventory({ open, scanVersion, onOpen }) {
       <div className="shopping-heading">
         <div>
           <h2 id="fridge-inventory-title">In fridge</h2>
-          <p>Scans add ingredients here. Review names and add dates from your labels.</p>
-          <p>Items are marked “Use soon” within three days of the date you enter.</p>
+          <p>Scans and checked groceries appear here. Replace estimated dates with package dates when you have them.</p>
+          <p>Items are marked “Use soon” within three days of the listed date. Each new set of recipes uses one daily request.</p>
         </div>
         <span className="shopping-count">{items.length} {items.length === 1 ? "item" : "items"}</span>
       </div>
@@ -117,16 +122,26 @@ export default function FridgeInventory({ open, scanVersion, onOpen }) {
       {loadError && <p role="alert" className="fridge-error">{loadError} <button type="button" className="cooking-secondary" onClick={() => setRefreshCount((count) => count + 1)}>Retry</button></p>}
       {!loaded ? <p role="status">Loading fridge items…</p> : !loadError && items.length === 0 && <p>Scan your fridge or add an ingredient below.</p>}
 
+      {useSoonItems.length > 0 && <div className="fridge-item-form">
+        <label>Use up soon
+          <select value={soonId} onChange={(event) => setSelectedSoonId(event.target.value)}>
+            {useSoonItems.map((item) => <option key={item.id} value={item.id}>{item.name} · {formatDate(item.expiryDate)}</option>)}
+          </select>
+        </label>
+        <button type="button" className="planner-primary" onClick={() => onFindRecipes(soonId)}>Find recipes</button>
+      </div>}
+
       {items.length > 0 && <ul className="fridge-item-list">
         {items.map((item) => {
           const status = getExpiryStatus(item.expiryDate, today, soon);
           return <li key={item.id}>
             <div className="fridge-item-info">
               <strong>{item.name}</strong>
-              <span>{item.expiryDate ? formatDate(item.expiryDate) : "No expiry date"}</span>
+              <span>{item.expiryDate ? (item.expiryEstimated ? "Estimated · " : "") + formatDate(item.expiryDate) : "No expiry date"}</span>
               {status && <span className="fridge-date-status">{status}</span>}
             </div>
             <div className="fridge-item-actions">
+              {status !== "Past marked date" && <button type="button" className="cooking-secondary" aria-label={"Find recipes with " + item.name} onClick={() => onFindRecipes(item.id)}>Find recipes</button>}
               <button type="button" className="cooking-secondary" disabled={busy} aria-label={"Edit " + item.name} onClick={() => beginEdit(item)}>Edit</button>
               <button type="button" className="cooking-secondary" disabled={busy} aria-label={"Remove " + item.name} onClick={() => changeItem("DELETE", { id: item.id })}>Remove</button>
             </div>

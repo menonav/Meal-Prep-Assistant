@@ -70,6 +70,10 @@ export default function PlannerClient({ userId, premium, recipes }) {
   const [weekPlans, setWeekPlans] = useState({});
   const [tab, setTab] = useState("plan");
   const [fridgeScanVersion, setFridgeScanVersion] = useState(0);
+  const [shoppingError, setShoppingError] = useState("");
+  const [shoppingPending, setShoppingPending] = useState(false);
+  const fridgeAssistant = useRef(null);
+  const shoppingRequest = useRef(false);
   const [cooking, setCooking] = useState(null);
   const [selectedRecipes, setSelectedRecipes] = useState({});
   const [customItem, setCustomItem] = useState("");
@@ -227,8 +231,33 @@ export default function PlannerClient({ userId, premium, recipes }) {
     updateWeek((current) => ({ ...current, meals: current.meals.filter((meal) => meal.id !== mealId) }));
   }
 
-  function toggleItem(key) {
-    updateWeek((current) => ({ ...current, checked: { ...current.checked, [key]: !current.checked[key] } }));
+  async function toggleItem(item) {
+    if (shoppingRequest.current) return;
+    setShoppingError("");
+    const checking = !week.checked[item.key];
+    if (checking) {
+      shoppingRequest.current = true;
+      setShoppingPending(true);
+      try {
+        const response = await fetch("/api/fridge-inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: item.name, purchased: true }),
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Couldn’t add this item to your fridge.");
+        }
+        setFridgeScanVersion((version) => version + 1);
+      } catch (failure) {
+        setShoppingError(failure.message || "Couldn’t add this item to your fridge.");
+        return;
+      } finally {
+        shoppingRequest.current = false;
+        setShoppingPending(false);
+      }
+    }
+    updateWeek((current) => ({ ...current, checked: { ...current.checked, [item.key]: checking } }));
   }
 
   function addCustomItem(event) {
@@ -265,7 +294,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
         <Link className="planner-back" href="/dashboard">← Your account</Link>
       </div>
 
-      {premium ? <FridgeAssistant premium={premium} onAddRecipe={addAiMeal} onInventorySaved={() => setFridgeScanVersion((version) => version + 1)} /> : (
+      {premium ? <FridgeAssistant ref={fridgeAssistant} premium={premium} onAddRecipe={addAiMeal} onInventorySaved={() => setFridgeScanVersion((version) => version + 1)} /> : (
         <section className="fridge-assistant">
           <div className="fridge-heading"><div><h2>Meal Prep Assistant Plus</h2><p>Plus includes the shopping list, fridge scans, step-by-step cooking, and the AI coach.</p></div></div>
         </section>
@@ -284,7 +313,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
         </div>
       </div>
 
-      {premium && <FridgeInventory open={tab === "fridge"} scanVersion={fridgeScanVersion} onOpen={() => setTab("fridge")} />}
+      {premium && <FridgeInventory open={tab === "fridge"} scanVersion={fridgeScanVersion} onOpen={() => setTab("fridge")} onFindRecipes={(id) => fridgeAssistant.current?.findRecipes(id)} />}
 
       {!premium || tab === "plan" ? (
         <>
@@ -330,12 +359,13 @@ export default function PlannerClient({ userId, premium, recipes }) {
         </>
       ) : (
         tab === "list" && <section className="shopping-panel">
-          <div className="shopping-heading"><div><p className="planner-eyebrow">Everything in one place</p><h2>Your shopping list</h2><p>This list combines what you still need for this week’s meals.</p></div><span className="shopping-count">{generatedItems.length + week.extras.length} items</span></div>
+          <div className="shopping-heading"><div><p className="planner-eyebrow">Everything in one place</p><h2>Your shopping list</h2><p>Check off an item to add it to your fridge.</p></div><span className="shopping-count">{generatedItems.length + week.extras.length} items</span></div>
+          {shoppingError && <p role="alert" className="fridge-error">{shoppingError}</p>}
           {groupedItems.length ? <div className="shopping-groups">
             {groupedItems.map(([category, items]) => <section className="shopping-group" key={category}>
               <h3>{category}<span>{items.filter((item) => week.checked[item.key]).length}/{items.length}</span></h3>
               <ul>{items.map((item) => <li className={week.checked[item.key] ? "checked" : ""} key={item.key}>
-                <label><input type="checkbox" checked={Boolean(week.checked[item.key])} onChange={() => toggleItem(item.key)} /><span className="checkmark" aria-hidden="true">✓</span><span className="item-name">{item.name}</span></label>
+                <label><input type="checkbox" checked={Boolean(week.checked[item.key])} disabled={shoppingPending} onChange={() => toggleItem(item)} /><span className="checkmark" aria-hidden="true">✓</span><span className="item-name">{item.name}</span></label>
                 {typeof item.amount === "number" && <span className="item-amount">{formatAmount(item.amount)} {item.unit}</span>}
                 {item.category === "Added by you" && <button className="remove-grocery" type="button" aria-label={`Remove ${item.name}`} onClick={() => removeCustomItem(item.key)}>×</button>}
               </li>)}</ul>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "../../../lib/auth/server";
-import { addFridgeItem, deleteFridgeItem, hasPremiumAccess, readFridgeItems, updateFridgeItem } from "../../../lib/app-data";
+import { estimateShelfLife } from "../../../lib/fridge-shelf-life";
+import { addPurchasedFridgeItem, addFridgeItem, deleteFridgeItem, hasPremiumAccess, readFridgeItems, updateFridgeItem } from "../../../lib/app-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,10 @@ async function handle(request, method) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const expiryDate = body.expiryDate === "" || body.expiryDate == null ? null : body.expiryDate;
     if (!name || name.length > 120) return fail("Enter an ingredient name up to 120 characters.", 400);
+    if (method === "POST" && body.purchased === true) {
+      await addPurchasedFridgeItem(userId, name, estimateShelfLife(name));
+      return NextResponse.json({ ok: true });
+    }
     if (expiryDate !== null && !validDate(expiryDate)) return fail("Enter a valid expiry date.", 400);
 
     const item = method === "POST"
