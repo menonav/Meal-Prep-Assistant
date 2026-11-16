@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./planner.css";
 import FridgeAssistant from "./fridge-assistant";
 import FridgeInventory from "./fridge-inventory";
+import FoodPreferences from "./food-preferences";
 import CookingMode from "./cooking-mode";
 
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
@@ -310,10 +311,13 @@ export default function PlannerClient({ userId, premium, recipes }) {
           <button type="button" role="tab" aria-selected={tab === "plan"} className={tab === "plan" ? "active" : ""} onClick={() => setTab("plan")}>Weekly plan <span>{plannedCount}</span></button>
           <button type="button" role="tab" disabled={!premium} aria-selected={premium && tab === "list"} className={premium && tab === "list" ? "active" : ""} onClick={() => setTab("list")}>Shopping list {premium ? <span>{checkedCount}/{generatedItems.length + week.extras.length}</span> : <span>Plus</span>}</button>
           {premium && <button type="button" role="tab" aria-selected={tab === "fridge"} className={tab === "fridge" ? "active" : ""} onClick={() => setTab("fridge")}>In fridge</button>}
+          {premium && <button type="button" role="tab" aria-selected={tab === "preferences"} className={tab === "preferences" ? "active" : ""} onClick={() => setTab("preferences")}>Preferences</button>}
         </div>
       </div>
 
       {premium && <FridgeInventory open={tab === "fridge"} scanVersion={fridgeScanVersion} onOpen={() => setTab("fridge")} onFindRecipes={(id) => fridgeAssistant.current?.findRecipes(id)} />}
+
+      {premium && tab === "preferences" && <FoodPreferences />}
 
       {!premium || tab === "plan" ? (
         <>

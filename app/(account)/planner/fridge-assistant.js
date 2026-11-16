@@ -21,7 +21,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
   const [dayIndex, setDayIndex] = useState(0);
   const [message, setMessage] = useState("");
 
-  const { recipes = [], ingredients = [], selectedIngredient = null } = ideaSets[setIndex] ?? {};
+  const { recipes = [], ingredients = [], selectedIngredient = null, hasAllergyPreferences = false } = ideaSets[setIndex] ?? {};
 
   useEffect(() => {
     if (!photo) { setPreview(""); return; }
@@ -61,7 +61,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
           onHand: spottedNames.has(ingredientMatchKey(ingredient.name)),
         })),
       }));
-      const nextSet = { recipes: nextRecipes, ingredients: spotted, selectedIngredient: payload.selectedIngredient };
+      const nextSet = { recipes: nextRecipes, ingredients: spotted, selectedIngredient: payload.selectedIngredient, hasAllergyPreferences: payload.hasAllergyPreferences };
       setFocusItemId(itemId);
       setIdeaSets((current) => isRegeneration ? [...current, nextSet] : [nextSet]);
       setSetIndex(isRegeneration ? ideaSets.length : 0);
@@ -139,6 +139,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
         <div className="fridge-result-heading">
           <h3>{selectedIngredient ? "Recipes with " + selectedIngredient : "Here’s what I spotted"}</h3>
           {!selectedIngredient && <p>{ingredients.join(" · ")}</p>}
+          {hasAllergyPreferences && <p>Check ingredient labels and possible cross-contact before cooking.</p>}
           <p>Before adding a recipe, check the ingredients you have enough of. The shopping list only adds what you still need.</p>
         </div>
         <div className="cooking-nav" aria-label="Recipe idea sets">

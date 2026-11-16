@@ -42,3 +42,12 @@
 .fridge-item-form input{min-width:0;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--ink);background:#fffef9;font:inherit}
 .fridge-item-form button:disabled{opacity:.45;cursor:default}
 @media(max-width:460px){.fridge-item-list li{align-items:flex-start;flex-direction:column}.fridge-item-form label:first-child{flex-basis:100%}}
+
+.planner-tabs{flex-wrap:wrap}
+.food-preferences-form{display:grid;gap:12px;margin:16px 0 0;max-width:560px;font-size:13px}
+.food-preferences-form label{display:grid;gap:5px;color:var(--ink);font-weight:700}
+.food-preferences-form input{min-width:0;border:1px solid var(--line);border-radius:7px;padding:9px 10px;color:var(--ink);background:#fffef9;font:inherit;font-weight:400}
+.food-preferences-form input[type=number]{max-width:130px}
+.food-preferences-form p{margin:0;color:var(--muted);line-height:1.5}
+.food-preferences-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.food-preferences-actions button:disabled{opacity:.45;cursor:default}
