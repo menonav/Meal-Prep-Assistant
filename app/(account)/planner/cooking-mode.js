@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 const formatQuantity = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
-export default function CookingMode({ recipe, servings, premium, onClose }) {
+export default function CookingMode({ recipe, servings, premium, onFinish, onClose }) {
   const dialog = useRef(null);
   const request = useRef(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -87,7 +87,10 @@ export default function CookingMode({ recipe, servings, premium, onClose }) {
         <button type="button" className="cooking-secondary" disabled={stepIndex === 0}
           onClick={() => setStepIndex((i) => i - 1)}>Previous</button>
         {finished ? <button type="button" className="planner-primary" onClick={onClose}>Back to planner</button>
-          : <button type="button" className="planner-primary" onClick={() => setStepIndex((i) => i + 1)}>
+          : <button type="button" className="planner-primary" onClick={() => {
+            if (stepIndex + 1 === steps.length) onFinish();
+            setStepIndex((i) => i + 1);
+          }}>
             {stepIndex + 1 === steps.length ? "Finish cooking" : "Next step"}
           </button>}
       </div>}

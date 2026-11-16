@@ -11,10 +11,12 @@ function ingredientMatchKey(name) {
 
 const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddRecipe, onInventorySaved }, ref) {
   const sectionRef = useRef(null);
+  const photoInput = useRef(null);
   const busyRef = useRef(false);
   const preferencesRevision = useRef(0);
   const [recipeType, setRecipeType] = useState("meal");
   const [focusItemId, setFocusItemId] = useState(null);
+  const [usingInventory, setUsingInventory] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
   const [ideaSets, setIdeaSets] = useState([]);
@@ -34,8 +36,8 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     return () => URL.revokeObjectURL(url);
   }, [photo]);
 
-  async function scanFridge(isRegeneration = false, itemId = isRegeneration ? focusItemId : null) {
-    if ((!photo && !itemId) || busyRef.current) return;
+  async function scanFridge({ regenerate = false, itemId = focusItemId, inventory = usingInventory } = {}) {
+    if ((!photo && !itemId && !inventory) || busyRef.current) return;
     if (remainingScans === 0) {
       setError("You’re out of recipe requests for today. Try again tomorrow.");
       return;
@@ -48,8 +50,9 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     const form = new FormData();
     form.set("recipeType", recipeType);
     if (itemId) form.set("itemId", itemId);
+    else if (inventory) form.set("source", "inventory");
     else form.set("photo", photo);
-    if (isRegeneration) {
+    if (regenerate) {
       form.set("previousTitles", JSON.stringify(ideaSets.flatMap((set) => set.recipes.map((recipe) => recipe.title)).slice(-MAX_PREVIOUS_RECIPE_TITLES)));
     }
     try {
@@ -73,8 +76,9 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
       }));
       const nextSet = { recipes: nextRecipes, ingredients: spotted, selectedIngredient: payload.selectedIngredient, hasAllergyPreferences: payload.hasAllergyPreferences };
       setFocusItemId(itemId);
-      setIdeaSets((current) => isRegeneration ? [...current, nextSet] : [nextSet]);
-      setSetIndex(isRegeneration ? ideaSets.length : 0);
+      setUsingInventory(inventory);
+      setIdeaSets((current) => regenerate ? [...current, nextSet] : [nextSet]);
+      setSetIndex(regenerate ? ideaSets.length : 0);
       if (payload.inventorySaved === true) {
         onInventorySaved();
         if (spotted.length > 0) setMessage("Ingredients saved to In fridge.");
@@ -93,6 +97,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     clearRecipeIdeas() {
       preferencesRevision.current += 1;
       setFocusItemId(null);
+      setUsingInventory(false);
       setIdeaSets([]);
       setSetIndex(0);
       setError("");
@@ -100,7 +105,19 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     },
     findRecipes(itemId) {
       sectionRef.current?.scrollIntoView({ block: "start" });
-      scanFridge(false, itemId);
+      scanFridge({ itemId, inventory: true });
+    },
+    findInventoryRecipes(targetDay) {
+      sectionRef.current?.scrollIntoView({ block: "start" });
+      if (busyRef.current) return;
+      setDayIndex(targetDay);
+      setPhoto(null);
+      if (photoInput.current) photoInput.current.value = "";
+      setUsingInventory(true);
+      setFocusItemId(null);
+      setIdeaSets([]);
+      setSetIndex(0);
+      scanFridge({ itemId: null, inventory: true });
     },
   }));
 
@@ -128,6 +145,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
   function choosePhoto(event) {
     setPhoto(event.target.files?.[0] || null);
     setFocusItemId(null);
+    setUsingInventory(false);
     setIdeaSets([]);
     setSetIndex(0);
     setError("");
@@ -149,15 +167,15 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
         <p className="fridge-unlock" role="status">Fridge scans are included in your Meal Prep Assistant subscription. We couldn’t confirm access for this account.</p>
       ) : (
         <>
-          <form className="fridge-upload-form" onSubmit={(event) => { event.preventDefault(); if (!ideaSets.length) scanFridge(false, focusItemId); }}>
+          <form className="fridge-upload-form" onSubmit={(event) => { event.preventDefault(); if (!ideaSets.length) scanFridge(); }}>
             <label className="fridge-file-label">Recipe type
               <select className="fridge-type-select" value={recipeType} disabled={pending} onChange={chooseRecipeType}>
                 {RECIPE_TYPES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
+            <label className="fridge-file-label">Choose a fridge photo<input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
             {preview && <img className="fridge-photo-preview" src={preview} alt="Selected fridge contents" />}
-            {(ideaSets.length === 0) && <button className="planner-primary" type="submit" disabled={(!photo && !focusItemId) || pending || remainingScans === 0}>{pending ? "Finding ideas…" : `Find ${recipeType} ideas`}</button>}
+            {(ideaSets.length === 0) && <button className="planner-primary" type="submit" disabled={(!photo && !focusItemId && !usingInventory) || pending || remainingScans === 0}>{pending ? "Finding ideas…" : `Find ${recipeType} ideas${usingInventory ? " from my fridge" : ""}`}</button>}
             {FRIDGE_DAILY_LIMIT !== null && <span className="fridge-usage">{remainingScans === null ? `Up to ${FRIDGE_DAILY_LIMIT} recipe requests per day` : `${remainingScans} recipe requests left today`}</span>}
           </form>
           <p className="fridge-privacy-note">The photo is sent securely for analysis and isn’t saved in your plan. AI can misread ingredients; check labels and food freshness yourself.</p>
@@ -169,8 +187,8 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
       {message && <p className="fridge-success" role="status">{message}</p>}
       {recipes.length > 0 && <div className="fridge-results">
         <div className="fridge-result-heading">
-          <h3>{selectedIngredient ? "Recipes with " + selectedIngredient : "Here’s what I spotted"}</h3>
-          {!selectedIngredient && <p>{ingredients.join(" · ")}</p>}
+          <h3>{selectedIngredient ? "Recipes with " + selectedIngredient : usingInventory ? "Ideas from your fridge" : "Here’s what I spotted"}</h3>
+          {!usingInventory && <p>{ingredients.join(" · ")}</p>}
           {hasAllergyPreferences && <p>Check ingredient labels and possible cross-contact before cooking.</p>}
           <p>Before adding a recipe, check the ingredients you have enough of. The shopping list only adds what you still need.</p>
         </div>
@@ -180,7 +198,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
           {setIndex < ideaSets.length - 1 ? (
             <button type="button" className="cooking-secondary" disabled={pending} onClick={() => setSetIndex((index) => index + 1)}>Next set</button>
           ) : (
-            <button type="button" className="cooking-secondary" disabled={pending || remainingScans === 0} onClick={() => scanFridge(true)}>
+            <button type="button" className="cooking-secondary" disabled={pending || remainingScans === 0} onClick={() => scanFridge({ regenerate: true })}>
               {pending ? "Finding more ideas…" : "More recipe ideas"}
             </button>
           )}

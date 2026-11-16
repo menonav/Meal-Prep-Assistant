@@ -12,6 +12,8 @@ import CookingMode from "./cooking-mode";
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const EMPTY_WEEK = { meals: [], extras: [], checked: {} };
+const FRIDGE_IDEAS = "fridge-ideas";
+const HISTORY_LIMIT = 12;
 
 function weekStartFor(date) {
   const result = new Date(date);
@@ -65,6 +67,28 @@ function initialsForDay(day) {
 
 function hasSavedPlans(plans) {
   return Boolean(plans && typeof plans === "object" && Object.keys(plans).length);
+}
+
+function recipeHistory(plans, recipes) {
+  const starters = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const history = new Map();
+  const weeks = Object.keys(plans).sort().reverse();
+  for (const weekKey of weeks) {
+    for (const meal of (plans[weekKey]?.meals || []).slice().reverse()) {
+      const recipe = meal.recipe || starters.get(meal.recipeId);
+      if (typeof recipe?.title !== "string" || (meal.recipe && !Array.isArray(recipe.ingredients))) continue;
+      const key = meal.recipe ? `saved:${recipe.title.trim().toLowerCase()}` : recipe.id;
+      const existing = history.get(key);
+      if (!existing || (meal.cooked && !existing.cooked)) {
+        history.set(key, { key, recipe, custom: Boolean(meal.recipe), cooked: Boolean(meal.cooked) });
+      }
+    }
+  }
+  const entries = [...history.values()];
+  return {
+    cooked: entries.filter((entry) => entry.cooked).slice(0, HISTORY_LIMIT),
+    planned: entries.filter((entry) => !entry.cooked && entry.custom).slice(0, HISTORY_LIMIT),
+  };
 }
 
 export default function PlannerClient({ userId, premium, recipes }) {
@@ -171,6 +195,8 @@ export default function PlannerClient({ userId, premium, recipes }) {
 
   const currentKey = weekStart ? dateKey(weekStart) : "";
   const week = weekPlans[currentKey] || EMPTY_WEEK;
+  const history = useMemo(() => premium ? recipeHistory(weekPlans, recipes) : { cooked: [], planned: [] }, [premium, weekPlans, recipes]);
+  const usedStarters = new Set(history.cooked.filter((entry) => !entry.custom).map((entry) => entry.key));
   const generatedItems = useMemo(() => premium ? shoppingItems(week, recipes) : [], [premium, week, recipes]);
   const groupedItems = useMemo(() => {
     const groups = new Map();
@@ -202,11 +228,24 @@ export default function PlannerClient({ userId, premium, recipes }) {
   function addMeal(dayIndex) {
     const recipeId = selectedRecipes[dayIndex];
     if (!recipeId) return;
-    updateWeek((current) => ({
-      ...current,
-      meals: [...current.meals, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, dayIndex, recipeId, servings: 2 }],
-    }));
     setSelectedRecipes((current) => ({ ...current, [dayIndex]: "" }));
+    if (premium && recipeId === FRIDGE_IDEAS) {
+      fridgeAssistant.current?.findInventoryRecipes(dayIndex);
+      return;
+    }
+    const saved = [...history.cooked, ...history.planned].find((entry) => entry.key === recipeId);
+    if (saved?.custom) {
+      const recipe = saved.recipe;
+      addAiMeal({
+        ...recipe,
+        ingredients: recipe.ingredients.map((ingredient) => ({ ...ingredient, onHand: false })),
+      }, dayIndex);
+    } else if (recipes.some((recipe) => recipe.id === recipeId)) {
+      updateWeek((current) => ({
+        ...current,
+        meals: [...current.meals, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, dayIndex, recipeId, servings: 2 }],
+      }));
+    }
   }
 
   function addAiMeal(recipe, dayIndex) {
@@ -220,6 +259,21 @@ export default function PlannerClient({ userId, premium, recipes }) {
       }],
     }));
     setTab("plan");
+  }
+
+  function finishCooking() {
+    const { mealId, weekKey } = cooking;
+    setWeekPlans((current) => {
+      const cookedWeek = current[weekKey];
+      if (!cookedWeek?.meals.some((meal) => meal.id === mealId && !meal.cooked)) return current;
+      return {
+        ...current,
+        [weekKey]: {
+          ...cookedWeek,
+          meals: cookedWeek.meals.map((meal) => meal.id === mealId ? { ...meal, cooked: true } : meal),
+        },
+      };
+    });
   }
 
   function changeServings(mealId, amount) {
@@ -286,7 +340,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
 
   return (
     <main className="planner-page">
-      {premium && cooking && <CookingMode recipe={cooking.recipe} servings={cooking.servings} premium={premium} onClose={() => setCooking(null)} />}
+      {premium && cooking && <CookingMode recipe={cooking.recipe} servings={cooking.servings} premium={premium} onFinish={finishCooking} onClose={() => setCooking(null)} />}
       <div className="planner-topline">
         <div>
           <p className="planner-eyebrow">A little plan goes a long way</p>
@@ -337,7 +391,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
                         <div className="planned-meal" key={meal.id}>
                           <span className="meal-emoji" aria-hidden="true">{recipe.emoji}</span>
                           <div className="meal-info"><strong>{recipe.title}</strong><small>{recipe.time} min · {meal.servings} servings</small><div className="serving-controls"><button type="button" aria-label={`Decrease servings for ${recipe.title}`} onClick={() => changeServings(meal.id, -1)}>−</button><span>{meal.servings}</span><button type="button" aria-label={`Increase servings for ${recipe.title}`} onClick={() => changeServings(meal.id, 1)}>+</button></div>
-                            {premium && <button type="button" className="start-cooking" aria-label={`Start cooking ${recipe.title}`} onClick={() => setCooking({ recipe, servings: meal.servings })}>Start cooking</button>}
+                            {premium && <button type="button" className="start-cooking" aria-label={`Start cooking ${recipe.title}`} onClick={() => setCooking({ recipe, servings: meal.servings, mealId: meal.id, weekKey: currentKey })}>Start cooking</button>}
                           </div>
                           <button className="remove-meal" type="button" onClick={() => removeMeal(meal.id)} aria-label={`Remove ${recipe.title}`}>×</button>
                         </div>
@@ -349,7 +403,16 @@ export default function PlannerClient({ userId, premium, recipes }) {
                     <label className="sr-only" htmlFor={`recipe-${index}`}>Choose a recipe for {day}</label>
                     <select id={`recipe-${index}`} value={selectedRecipes[index] || ""} onChange={(event) => setSelectedRecipes((current) => ({ ...current, [index]: event.target.value }))}>
                       <option value="">Add a meal…</option>
-                      {recipes.map((recipe) => <option value={recipe.id} key={recipe.id}>{recipe.title}</option>)}
+                      {premium && <option value={FRIDGE_IDEAS}>Find ideas from my fridge</option>}
+                      {history.cooked.length > 0 && <optgroup label="Cooked before">
+                        {history.cooked.map(({ key, recipe }) => <option value={key} key={key}>{recipe.title}</option>)}
+                      </optgroup>}
+                      {history.planned.length > 0 && <optgroup label="Previously planned">
+                        {history.planned.map(({ key, recipe }) => <option value={key} key={key}>{recipe.title}</option>)}
+                      </optgroup>}
+                      <optgroup label="Starter recipes">
+                        {recipes.filter(({ id }) => !usedStarters.has(id)).map((recipe) => <option value={recipe.id} key={recipe.id}>{recipe.title}</option>)}
+                      </optgroup>
                     </select>
                     <button type="submit" disabled={!selectedRecipes[index]} aria-label={`Add meal to ${day}`}>+</button>
                   </form>
