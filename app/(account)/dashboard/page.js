@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getAuth } from "../../../lib/auth/server";
 import LogoutButton from "../../components/logout-button";
 
@@ -13,31 +14,23 @@ export default async function DashboardPage({ searchParams }) {
   if (!session?.user) redirect("/login");
 
   const { billing } = await searchParams;
-  const billingMessage = billing === "success"
-    ? "Thanks. Stripe is confirming your subscription; billing status will sync automatically."
-    : billing === "cancelled"
-      ? "Checkout was canceled. No subscription was started."
-      : billing === "already-active"
-        ? "You already have a subscription. Use Manage subscription to make changes."
-        : billing === "no-subscription"
-          ? "There isn’t a billing profile to manage yet. Start checkout to subscribe."
-          : null;
+  const billingMessage = billing === "no-subscription"
+    ? "There isn’t a subscription to manage yet. You can upgrade from the planner."
+    : billing === "already-active"
+      ? "You already have a subscription. Use Manage subscription to make changes."
+      : billing === "success" ? "Thanks. Stripe is confirming your subscription."
+        : billing === "cancelled" ? "Checkout was canceled." : null;
 
   return <section className="account-card">
     <p className="eyebrow">You’re at home here</p>
     <h1>Welcome, {session.user.name || "cook"}.</h1>
     <p>You’re signed in as <strong>{session.user.email}</strong>.</p>
-    <p>Your account is ready. Start your Meal Prep Assistant subscription or manage an existing plan below.</p>
-    {billingMessage && <p className="billing-message" role="status">{billingMessage}</p>}
-    <div className="billing-actions">
-      <form action="/api/billing/checkout" method="post">
-        <button className="button" type="submit">Continue to secure checkout <span aria-hidden="true">→</span></button>
-      </form>
-      <form action="/api/billing/portal" method="post">
-        <button className="billing-secondary" type="submit">Manage subscription</button>
-      </form>
+    <p>Your account is ready. Let’s make this week’s meals a little easier.</p>
+    {billingMessage && <p role="status">{billingMessage}</p>}
+    <div className="dashboard-actions">
+      <Link className="button" href="/planner">Open your meal planner <span aria-hidden="true">→</span></Link>
+      <form action="/api/billing/portal" method="post"><button className="billing-secondary" type="submit">Manage subscription</button></form>
+      <LogoutButton />
     </div>
-    <p className="account-help">Payments are handled securely by Stripe. You can update or cancel through the billing portal.</p>
-    <LogoutButton />
   </section>;
 }

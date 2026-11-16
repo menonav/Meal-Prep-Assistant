@@ -1,6 +1,6 @@
 # Meal Prep Assistant
 
-A minimal Next.js App Router app with React and managed Neon Auth. The homepage preserves the original landing page's content, styles, Google Fonts, and Unsplash image, with account links added below the closing message. AI, meal planning, and payments are not implemented.
+A Next.js App Router app with managed Neon Auth, an account-synced weekly planner, a Stripe premium checkout, and an AI fridge-photo recipe feature. The free planner stores each signed-in user's weekly plan and shopping-list state in Neon Postgres. Premium members can upload a fridge photo to identify ingredients and get three practical recipes they can add to the weekly plan. The image is sent to OpenAI for analysis and is not stored by this app.
 
 ## Local development
 
@@ -27,8 +27,13 @@ pnpm start
 - `dist/index.html`: retained original reference; Next.js does not serve or build from this directory.
 - `pnpm-lock.yaml`: pinned dependency resolution for reproducible installs.
 - `/signup` and `/login`: email/password account forms using the official Neon Auth client.
-- `/dashboard`: server-protected account page with logout.
+- `/dashboard`: server-protected account page with logout and a link to the planner.
+- `/planner`: server-protected weekly meal planner with sample recipes, AI recipe suggestions, serving adjustments, and a combined shopping list. Plan state is stored in Neon by authenticated user; browser-only legacy plans can be imported after confirmation.
 - `app/api/auth/[...path]/route.js`: same-origin SDK proxy; secrets stay on the server.
+- `app/api/planner/route.js`: authenticated read/write API for account-owned planner data.
+- `app/api/ai/fridge/route.js`: authenticated, premium-gated photo analysis via OpenAI Responses API.
+- `app/api/stripe/`: Checkout Session creation, verified webhook, and confirmed payment return.
+- `lib/app-data.js`: Neon Postgres storage for meal plans, premium entitlements, and a five-scan daily AI limit.
 - `lib/auth/`: environment validation and Neon Auth SDK configuration.
 - `proxy.js`: session validation/refresh for dashboard routes. The dashboard also independently revalidates sessions with Neon, bypassing the cookie cache.
 
@@ -46,6 +51,7 @@ The local checkout has no Neon variables or Vercel project link. Vercel's remote
 | --- | --- |
 | `NEON_AUTH_BASE_URL` | The full Auth endpoint for the matching Neon branch, copied from Neon Auth or supplied by the Vercel integration. This is an HTTPS URL, not a PostgreSQL connection string. |
 | `NEON_AUTH_COOKIE_SECRET` | A cryptographically random secret of at least 32 characters, kept stable across deploys within the same environment. |
+| `DATABASE_URL` | The Postgres connection string for the matching Neon branch; the app creates its planner and entitlement tables on first use. |
 
 ### Diagnosing “Account access is being set up”
 
@@ -73,6 +79,35 @@ The SDK manages persistent HTTP-only, Secure, SameSite cookies and sign-out inva
 
 Fonts and the hero image still load from external services.
 
+## AI recipes and Stripe checkout
+
+Add these server-side environment variables in Vercel. Do not paste secret values into GitHub or chat:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Key for the AI fridge-photo analysis. The default model is `gpt-4.1-mini`; set `OPENAI_MODEL` only if you choose another vision-capable Responses API model. |
+| `STRIPE_SECRET_KEY` | Stripe API key. Use a test-mode key while testing. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for the Stripe webhook endpoint below. |
+| `STRIPE_PRICE_ID` | Recurring Plus Price ID in the same Stripe mode as the API key. The included fallback is the original $1/month sandbox price. |
+
+Create a Stripe webhook endpoint at `https://<production-domain>/api/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`, then save its signing secret as `STRIPE_WEBHOOK_SECRET`. Verified webhooks and the verified success return sync subscription status to Neon; canceled or inactive subscriptions lose premium access. Set the same branch-specific `DATABASE_URL` used by the app so that entitlement can be saved.
+
+Use Stripe **test mode** and its documented test card numbers to check the recurring checkout and cancellation flow first. When switching to live mode, configure the live Stripe API key, live recurring Price ID, and live webhook signing secret together. Vercel Preview requires its own available keys and a webhook pointing to the Preview deployment if you want to test payments there.
+
+## Demo account and submission evidence
+
+The app grants premium access to `demo@demo.com` so the assignment demo login can use the AI feature without checkout. The Neon Auth user still needs to exist. In the Production branch's Neon Better Auth settings, turn off the email-verification requirement, create the assignment-specified demo account through `/signup`, then confirm you can log in through `/login`. Keep this account; the grader logs in and does not create it.
+
+For the required Neon screenshot, create a fresh account through `/signup` immediately before submission, then open the Production branch's Neon SQL editor and run:
+
+```sql
+SELECT id, email, "emailVerified", "createdAt"
+FROM neon_auth."user"
+ORDER BY "createdAt" DESC;
+```
+
+Capture the result with several real account rows visible, without showing password hashes or secrets. Put that screenshot, the production URL, and the GitHub repository link in the one-page Canvas submission.
+
 Implementation follows the [official Neon Next.js SDK guide](https://github.com/neondatabase/neon-js/blob/main/packages/auth/NEXT-JS.md) and [Neon authentication flow](https://github.com/neondatabase/website/blob/main/content/docs/auth/authentication-flow.md).
 
 ## Verification
@@ -98,7 +133,7 @@ The account dashboard uses Stripe Checkout for recurring subscriptions and Strip
 3. Enable Stripe's customer portal in Dashboard settings so customers can update or cancel their plan.
 4. Set these server-side variables in Vercel for Preview and Production separately: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, and `APP_URL`. Start with Stripe test-mode keys and test Price ID. `APP_URL` must be the origin of the environment being used. Never use `NEXT_PUBLIC_` for secret keys.
 5. For local testing, set `APP_URL=http://localhost:3000`, run the app, then run `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the `whsec_...` shown by Stripe CLI in `STRIPE_WEBHOOK_SECRET` for local development.
-6. In Stripe Dashboard, register `https://YOUR_DOMAIN/api/stripe/webhook` and subscribe to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Use the webhook signing secret for that endpoint as `STRIPE_WEBHOOK_SECRET` in the matching Vercel environment.
+6. In Stripe Dashboard, register `https://YOUR_DOMAIN/api/stripe/webhook` and subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Use the webhook signing secret for that endpoint as `STRIPE_WEBHOOK_SECRET` in the matching Vercel environment.
 
 The webhook verifies Stripe's signature, syncs subscription status, ignores stale event updates, and acknowledges duplicate deliveries safely. Do not grant paid access based only on the Checkout success redirect; use the webhook-synced subscription status for any future paywall.
 
