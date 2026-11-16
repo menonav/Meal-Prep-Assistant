@@ -3,6 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FRIDGE_DAILY_LIMIT, MAX_PREVIOUS_RECIPE_TITLES } from "../../../lib/fridge-limits";
 
+import { RECIPE_TYPES } from "../../../lib/recipe-types";
+
 function ingredientMatchKey(name) {
   return name.trim().toLowerCase().replace(/^(carton|block|bag|bunch|head) of\s+/, "");
 }
@@ -11,6 +13,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
   const sectionRef = useRef(null);
   const busyRef = useRef(false);
   const preferencesRevision = useRef(0);
+  const [recipeType, setRecipeType] = useState("meal");
   const [focusItemId, setFocusItemId] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
@@ -43,6 +46,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     setError("");
     setMessage("");
     const form = new FormData();
+    form.set("recipeType", recipeType);
     if (itemId) form.set("itemId", itemId);
     else form.set("photo", photo);
     if (isRegeneration) {
@@ -112,6 +116,15 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     }));
   }
 
+  function chooseRecipeType(event) {
+    if (busyRef.current) return;
+    setRecipeType(event.target.value);
+    setIdeaSets([]);
+    setSetIndex(0);
+    setError("");
+    setMessage("");
+  }
+
   function choosePhoto(event) {
     setPhoto(event.target.files?.[0] || null);
     setFocusItemId(null);
@@ -136,10 +149,15 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
         <p className="fridge-unlock" role="status">Fridge scans are included in your Meal Prep Assistant subscription. We couldn’t confirm access for this account.</p>
       ) : (
         <>
-          <form className="fridge-upload-form" onSubmit={(event) => { event.preventDefault(); if (!ideaSets.length || focusItemId) scanFridge(); }}>
+          <form className="fridge-upload-form" onSubmit={(event) => { event.preventDefault(); if (!ideaSets.length) scanFridge(false, focusItemId); }}>
+            <label className="fridge-file-label">Recipe type
+              <select className="fridge-type-select" value={recipeType} disabled={pending} onChange={chooseRecipeType}>
+                {RECIPE_TYPES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
             <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
             {preview && <img className="fridge-photo-preview" src={preview} alt="Selected fridge contents" />}
-            {(ideaSets.length === 0 || focusItemId) && <button className="planner-primary" type="submit" disabled={!photo || pending || remainingScans === 0}>{pending ? "Finding ingredients…" : "Find recipe ideas"}</button>}
+            {(ideaSets.length === 0) && <button className="planner-primary" type="submit" disabled={(!photo && !focusItemId) || pending || remainingScans === 0}>{pending ? "Finding ideas…" : `Find ${recipeType} ideas`}</button>}
             {FRIDGE_DAILY_LIMIT !== null && <span className="fridge-usage">{remainingScans === null ? `Up to ${FRIDGE_DAILY_LIMIT} recipe requests per day` : `${remainingScans} recipe requests left today`}</span>}
           </form>
           <p className="fridge-privacy-note">The photo is sent securely for analysis and isn’t saved in your plan. AI can misread ingredients; check labels and food freshness yourself.</p>
