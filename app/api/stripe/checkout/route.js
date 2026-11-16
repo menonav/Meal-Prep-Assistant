@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getAuth } from "../../../../lib/auth/server";
 import { hasPremiumAccess } from "../../../../lib/app-data";
 
+import { plusPriceId } from "../../../../lib/plus-price";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -25,10 +27,7 @@ export async function POST(request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Stripe checkout is not configured yet." }, { status: 503 });
   }
-  const priceId = process.env.STRIPE_PRICE_ID || "price_1Ua5KUDpv9sPAKUVzVvp32dD";
-  if (!priceId) {
-    return NextResponse.json({ error: "The monthly subscription price is not configured yet." }, { status: 503 });
-  }
+  const priceId = plusPriceId();
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -46,6 +45,7 @@ export async function POST(request) {
       success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/planner?payment=cancelled`,
     });
+    if (!session.url) return NextResponse.json({ error: "Stripe didn’t return a checkout page. Please try again." }, { status: 502 });
     return NextResponse.json({ url: session.url });
   } catch {
     return NextResponse.json({ error: "Couldn’t start checkout. Please try again." }, { status: 502 });

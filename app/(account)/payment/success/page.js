@@ -4,6 +4,8 @@ import Stripe from "stripe";
 import { getAuth } from "../../../../lib/auth/server";
 import { syncStripeSubscription } from "../../../../lib/app-data";
 
+import { plusPriceId } from "../../../../lib/plus-price";
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Premium access | Meal Prep Assistant" };
 
@@ -14,18 +16,21 @@ export default async function PaymentSuccessPage({ searchParams }) {
 
   const params = await searchParams;
   const sessionId = params?.session_id;
-  if (!sessionId || !process.env.STRIPE_SECRET_KEY) redirect("/planner?payment=pending");
+  if (typeof sessionId !== "string" || !/^cs_(?:test|live)_[a-zA-Z0-9]+$/.test(sessionId) || !process.env.STRIPE_SECRET_KEY) redirect("/planner?payment=pending");
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const checkout = await stripe.checkout.sessions.retrieve(String(sessionId));
     if (checkout.mode === "subscription"
         && checkout.status === "complete"
+        && ["paid", "no_payment_required"].includes(checkout.payment_status)
         && checkout.metadata?.userId === String(data.user.id)
         && checkout.subscription) {
       const subscriptionId = typeof checkout.subscription === "string" ? checkout.subscription : checkout.subscription.id;
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-      if (subscription.metadata?.userId === String(data.user.id)) {
+      if (subscription.metadata?.userId === String(data.user.id)
+          && ["active", "trialing"].includes(subscription.status)
+          && subscription.items.data.some(({ price }) => price.id === plusPriceId())) {
         await syncStripeSubscription({
           userId: String(data.user.id),
           email: String(data.user.email || ""),
@@ -34,7 +39,7 @@ export default async function PaymentSuccessPage({ searchParams }) {
           customerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id,
           status: subscription.status,
         });
-        return <section className="account-card"><p className="eyebrow">Subscription confirmed</p><h1>Premium is ready.</h1><p>Your account now has monthly AI fridge photo scans and recipe suggestions.</p><Link className="button" href="/planner">Open the planner →</Link></section>;
+        return <section className="account-card"><p className="eyebrow">Subscription confirmed</p><h1>Premium is ready.</h1><p>Your account now has the shopping list, fridge scans, cooking instructions, and AI coach.</p><Link className="button" href="/planner">Open the planner →</Link></section>;
       }
     }
   } catch {

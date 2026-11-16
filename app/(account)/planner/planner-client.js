@@ -6,6 +6,7 @@ import "./planner.css";
 import FridgeAssistant from "./fridge-assistant";
 import FridgeInventory from "./fridge-inventory";
 import FoodPreferences from "./food-preferences";
+import PlusCheckout from "./plus-checkout";
 import CookingMode from "./cooking-mode";
 
 const LEGACY_STORAGE_KEY = "meal-prep-assistant-plans-v1";
@@ -298,6 +299,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
       {premium ? <FridgeAssistant ref={fridgeAssistant} premium={premium} onAddRecipe={addAiMeal} onInventorySaved={() => setFridgeScanVersion((version) => version + 1)} /> : (
         <section className="fridge-assistant">
           <div className="fridge-heading"><div><h2>Meal Prep Assistant Plus</h2><p>Plus includes the shopping list, fridge scans, step-by-step cooking, and the AI coach.</p></div></div>
+          <PlusCheckout />
         </section>
       )}
 
