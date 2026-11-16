@@ -18,7 +18,7 @@ function toDraft(preferences) {
   };
 }
 
-export default function FoodPreferences() {
+export default function FoodPreferences({ onSaved }) {
   const [draft, setDraft] = useState(() => toDraft(EMPTY_FOOD_PREFERENCES));
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -76,6 +76,7 @@ export default function FoodPreferences() {
       if (!result.ok) throw new Error(payload.error);
       setDraft(toDraft(payload.preferences));
       setSaved(true);
+      onSaved();
     } catch (failure) {
       setError(failure.message || "Couldn’t save your preferences.");
     } finally {

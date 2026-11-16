@@ -317,7 +317,7 @@ export default function PlannerClient({ userId, premium, recipes }) {
 
       {premium && <FridgeInventory open={tab === "fridge"} scanVersion={fridgeScanVersion} onOpen={() => setTab("fridge")} onFindRecipes={(id) => fridgeAssistant.current?.findRecipes(id)} />}
 
-      {premium && tab === "preferences" && <FoodPreferences />}
+      {premium && tab === "preferences" && <FoodPreferences onSaved={() => fridgeAssistant.current?.clearRecipeIdeas()} />}
 
       {!premium || tab === "plan" ? (
         <>

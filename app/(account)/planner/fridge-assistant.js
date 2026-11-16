@@ -10,6 +10,7 @@ function ingredientMatchKey(name) {
 const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddRecipe, onInventorySaved }, ref) {
   const sectionRef = useRef(null);
   const busyRef = useRef(false);
+  const preferencesRevision = useRef(0);
   const [focusItemId, setFocusItemId] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
@@ -36,6 +37,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
       setError("You’re out of recipe requests for today. Try again tomorrow.");
       return;
     }
+    const startedAtRevision = preferencesRevision.current;
     busyRef.current = true;
     setPending(true);
     setError("");
@@ -50,6 +52,10 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
       const response = await fetch("/api/ai/fridge", { method: "POST", body: form });
       const payload = await response.json();
       if (Number.isInteger(payload.remainingScans)) setRemainingScans(payload.remainingScans);
+      if (startedAtRevision !== preferencesRevision.current) {
+        if (payload.inventorySaved === true) onInventorySaved();
+        return;
+      }
       if (!response.ok) throw new Error(payload.error || "Could not scan this photo.");
       const spotted = payload.ingredients || [];
       const spottedNames = new Set([...spotted, ...(payload.onHandIngredients || [])].map(ingredientMatchKey));
@@ -72,7 +78,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
         setError("Recipe ideas are ready, but your fridge list couldn’t be updated.");
       }
     } catch (scanError) {
-      setError(scanError.message);
+      if (startedAtRevision === preferencesRevision.current) setError(scanError.message);
     } finally {
       busyRef.current = false;
       setPending(false);
@@ -80,6 +86,14 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
   }
 
   useImperativeHandle(ref, () => ({
+    clearRecipeIdeas() {
+      preferencesRevision.current += 1;
+      setFocusItemId(null);
+      setIdeaSets([]);
+      setSetIndex(0);
+      setError("");
+      setMessage("Preferences updated. Find new recipe ideas to apply them.");
+    },
     findRecipes(itemId) {
       sectionRef.current?.scrollIntoView({ block: "start" });
       scanFridge(false, itemId);
