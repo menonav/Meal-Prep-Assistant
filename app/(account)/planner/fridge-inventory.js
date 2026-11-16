@@ -114,7 +114,7 @@ export default function FridgeInventory({ open, scanVersion, onOpen, onFindRecip
         <div>
           <h2 id="fridge-inventory-title">In fridge</h2>
           <p>Scans and checked groceries appear here. Replace estimated dates with package dates when you have them.</p>
-          <p>Items are marked “Use soon” within three days of the listed date. Each new set of recipes uses one daily request.</p>
+          <p>Items are marked “Use soon” within three days of the listed date.</p>
         </div>
         <span className="shopping-count">{items.length} {items.length === 1 ? "item" : "items"}</span>
       </div>

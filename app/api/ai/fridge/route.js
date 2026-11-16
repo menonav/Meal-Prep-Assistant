@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { FRIDGE_DAILY_LIMIT } from "../../../../lib/fridge-limits";
+import { FRIDGE_DAILY_LIMIT, MAX_PREVIOUS_RECIPE_TITLES } from "../../../../lib/fridge-limits";
 import { getAuth } from "../../../../lib/auth/server";
 import { consumeAiQuota, hasPremiumAccess, readFridgeItems, saveScannedFridgeItems } from "../../../../lib/app-data";
 
@@ -105,17 +105,20 @@ export async function POST(request) {
       try {
         if (typeof rawTitles !== "string" || rawTitles.length > 16_000) throw new Error();
         previousTitles = JSON.parse(rawTitles);
-        if (!Array.isArray(previousTitles) || previousTitles.length > (FRIDGE_DAILY_LIMIT - 1) * 3
+        if (!Array.isArray(previousTitles) || previousTitles.length > MAX_PREVIOUS_RECIPE_TITLES
           || previousTitles.some((title) => typeof title !== "string" || title.length > 220)) throw new Error();
       } catch {
         return NextResponse.json({ error: "Could not read the earlier recipe ideas." }, { status: 400 });
       }
     }
-    const calls = await consumeAiQuota(user.id);
-    if (calls === null) {
-      return NextResponse.json({ error: `You’ve used today’s ${FRIDGE_DAILY_LIMIT} AI recipe scans. Try again tomorrow.`, remainingScans: 0 }, { status: 429 });
+    let remainingScans = null;
+    if (FRIDGE_DAILY_LIMIT !== null) {
+      const calls = await consumeAiQuota(user.id);
+      if (calls === null) {
+        return NextResponse.json({ error: `You’ve used today’s ${FRIDGE_DAILY_LIMIT} AI recipe scans. Try again tomorrow.`, remainingScans: 0 }, { status: 429 });
+      }
+      remainingScans = Math.max(0, FRIDGE_DAILY_LIMIT - calls);
     }
-    const remainingScans = Math.max(0, FRIDGE_DAILY_LIMIT - calls);
     const imageUrl = isInventoryRequest ? null
       : `data:${image.type};base64,${Buffer.from(await image.arrayBuffer()).toString("base64")}`;
     const inventoryContext = JSON.stringify({

@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { FRIDGE_DAILY_LIMIT } from "../../../lib/fridge-limits";
+import { FRIDGE_DAILY_LIMIT, MAX_PREVIOUS_RECIPE_TITLES } from "../../../lib/fridge-limits";
 
 function ingredientMatchKey(name) {
   return name.trim().toLowerCase().replace(/^(carton|block|bag|bunch|head) of\s+/, "");
@@ -44,7 +44,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
     if (itemId) form.set("itemId", itemId);
     else form.set("photo", photo);
     if (isRegeneration) {
-      form.set("previousTitles", JSON.stringify(ideaSets.flatMap((set) => set.recipes.map((recipe) => recipe.title))));
+      form.set("previousTitles", JSON.stringify(ideaSets.flatMap((set) => set.recipes.map((recipe) => recipe.title)).slice(-MAX_PREVIOUS_RECIPE_TITLES)));
     }
     try {
       const response = await fetch("/api/ai/fridge", { method: "POST", body: form });
@@ -126,7 +126,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
             <label className="fridge-file-label">Choose a fridge photo<input type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={choosePhoto} /></label>
             {preview && <img className="fridge-photo-preview" src={preview} alt="Selected fridge contents" />}
             {(ideaSets.length === 0 || focusItemId) && <button className="planner-primary" type="submit" disabled={!photo || pending || remainingScans === 0}>{pending ? "Finding ingredients…" : "Find recipe ideas"}</button>}
-            <span className="fridge-usage">{remainingScans === null ? `Up to ${FRIDGE_DAILY_LIMIT} recipe requests per day` : `${remainingScans} recipe requests left today`}</span>
+            {FRIDGE_DAILY_LIMIT !== null && <span className="fridge-usage">{remainingScans === null ? `Up to ${FRIDGE_DAILY_LIMIT} recipe requests per day` : `${remainingScans} recipe requests left today`}</span>}
           </form>
           <p className="fridge-privacy-note">The photo is sent securely for analysis and isn’t saved in your plan. AI can misread ingredients; check labels and food freshness yourself.</p>
         </>
@@ -152,7 +152,7 @@ const FridgeAssistant = forwardRef(function FridgeAssistant({ premium, onAddReci
             </button>
           )}
         </div>
-        <p className="fridge-privacy-note">Each new set uses one of your daily recipe requests. Revisiting earlier sets doesn’t use a scan.</p>
+        {FRIDGE_DAILY_LIMIT !== null && <p className="fridge-privacy-note">Each new set uses one of your daily recipe requests. Revisiting earlier sets doesn’t use a scan.</p>}
         <label className="fridge-day-select">Add recipes to <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
         <div className="fridge-recipe-grid">{recipes.map((recipe, index) => <article className="fridge-recipe-card" key={`${recipe.title}-${index}`}>
           <p className="fridge-recipe-meta"><span>{recipe.emoji}</span> {recipe.time} min · serves {recipe.servings}</p>
